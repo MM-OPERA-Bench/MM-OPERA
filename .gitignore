@@ -19,6 +19,9 @@ results/*
 !results/RIA_results.json.example # Example result if you want to show format
 # ... add other example result files if needed
 
+# Logs
+logs/*
+
 # IDE specific
 .idea/
 .vscode/
