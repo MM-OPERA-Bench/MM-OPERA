@@ -1,0 +1,52 @@
+2025-05-14 01:13:09,155 - RIA_run_gpt-4o - INFO - Starting RIA evaluation for model: gpt-4o
+2025-05-14 01:13:09,155 - RIA_run_gpt-4o - INFO - Using project root: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA
+2025-05-14 01:13:09,156 - RIA_run_gpt-4o - INFO - Results will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\results\RIA_gpt-4o_results.json
+2025-05-14 01:13:09,156 - RIA_run_gpt-4o - INFO - Logs will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\logs\RIA_gpt-4o.log
+2025-05-14 01:13:09,157 - RIA_run_gpt-4o - INFO - Progress will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\progress\RIA_gpt-4o_progress.json
+2025-05-14 01:13:09,159 - RIA_run_gpt-4o - INFO - Hugging Face cache directory set to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\dataset
+2025-05-14 01:13:31,280 - RIA_run_gpt-4o - INFO - Dataset 'titic/MM-OPERA' loaded successfully.
+2025-05-14 01:13:31,281 - RIA_run_gpt-4o - INFO - Using 'ria' split with 8021 items.
+2025-05-14 01:13:31,282 - RIA_run_gpt-4o - ERROR - API key for model 'gpt-4o' could not be retrieved. Skipping.
+2025-05-14 01:13:31,283 - RIA_run_gpt-4o - INFO - RIA evaluation finished for model: gpt-4o.
+2025-05-14 01:13:31,283 - RIA_run_gpt-4o - INFO - Final results saved to C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\results\RIA_gpt-4o_results.json
+2025-05-14 01:14:17,100 - RIA_run_gpt-4o - INFO - Starting RIA evaluation for model: gpt-4o
+2025-05-14 01:14:17,100 - RIA_run_gpt-4o - INFO - Using project root: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA
+2025-05-14 01:14:17,101 - RIA_run_gpt-4o - INFO - Results will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\results\RIA_gpt-4o_results.json
+2025-05-14 01:14:17,101 - RIA_run_gpt-4o - INFO - Logs will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\logs\RIA_gpt-4o.log
+2025-05-14 01:14:17,102 - RIA_run_gpt-4o - INFO - Progress will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\progress\RIA_gpt-4o_progress.json
+2025-05-14 01:14:17,103 - RIA_run_gpt-4o - INFO - Hugging Face cache directory set to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\dataset
+2025-05-14 01:14:38,942 - RIA_run_gpt-4o - INFO - Dataset 'titic/MM-OPERA' loaded successfully.
+2025-05-14 01:14:38,943 - RIA_run_gpt-4o - INFO - Using 'ria' split with 8021 items.
+2025-05-14 01:14:38,944 - RIA_run_gpt-4o - ERROR - API key for model 'gpt-4o' could not be retrieved. Skipping.
+2025-05-14 01:14:38,944 - RIA_run_gpt-4o - INFO - RIA evaluation finished for model: gpt-4o.
+2025-05-14 01:14:38,945 - RIA_run_gpt-4o - INFO - Final results saved to C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\results\RIA_gpt-4o_results.json
+2025-05-14 01:17:54,443 - RIA_run_gpt-4o - INFO - Starting RIA evaluation for model: gpt-4o
+2025-05-14 01:17:54,445 - RIA_run_gpt-4o - INFO - Using project root: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA
+2025-05-14 01:17:54,445 - RIA_run_gpt-4o - INFO - Results will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\results\RIA_gpt-4o_results.json
+2025-05-14 01:17:54,446 - RIA_run_gpt-4o - INFO - Logs will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\logs\RIA_gpt-4o.log
+2025-05-14 01:17:54,446 - RIA_run_gpt-4o - INFO - Progress will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\progress\RIA_gpt-4o_progress.json
+2025-05-14 01:17:54,447 - RIA_run_gpt-4o - INFO - Hugging Face cache directory set to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\dataset
+2025-05-14 01:18:17,030 - RIA_run_gpt-4o - INFO - Dataset 'titic/MM-OPERA' loaded successfully.
+2025-05-14 01:18:17,031 - RIA_run_gpt-4o - INFO - Using 'ria' split with 8021 items.
+2025-05-14 01:18:17,033 - RIA_run_gpt-4o - ERROR - API key for model 'gpt-4o' could not be retrieved. Skipping.
+2025-05-14 01:18:17,033 - RIA_run_gpt-4o - INFO - RIA evaluation finished for model: gpt-4o.
+2025-05-14 01:18:17,034 - RIA_run_gpt-4o - INFO - Final results saved to C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\results\RIA_gpt-4o_results.json
+2025-05-14 01:20:49,783 - RIA_run_gpt-4o - INFO - Starting RIA evaluation for model: gpt-4o
+2025-05-14 01:20:49,783 - RIA_run_gpt-4o - INFO - Using project root: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA
+2025-05-14 01:20:49,784 - RIA_run_gpt-4o - INFO - Results will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\results\RIA_gpt-4o_results.json
+2025-05-14 01:20:49,784 - RIA_run_gpt-4o - INFO - Logs will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\logs\RIA_gpt-4o.log
+2025-05-14 01:20:49,785 - RIA_run_gpt-4o - INFO - Progress will be saved to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\progress\RIA_gpt-4o_progress.json
+2025-05-14 01:20:49,787 - RIA_run_gpt-4o - INFO - Hugging Face cache directory set to: C:\Hzimeng\College\SYSU\ScienceResearch\dataset_test\code-releasing\AnonymousCode\MM-OPERA\dataset
+2025-05-14 01:21:15,653 - RIA_run_gpt-4o - INFO - Dataset 'titic/MM-OPERA' loaded successfully.
+2025-05-14 01:21:15,655 - RIA_run_gpt-4o - INFO - Using 'ria' split with 8021 items.
+2025-05-14 01:21:15,738 - RIA_run_gpt-4o - INFO - Processing item: Easter or chocolate bunny(invisible, culture, relation, USAEnglish, English)
+2025-05-14 01:21:21,541 - RIA_run_gpt-4o - INFO - Successfully processed item: Easter or chocolate bunny(invisible, culture, relation, USAEnglish, English)
+2025-05-14 01:21:22,550 - RIA_run_gpt-4o - INFO - Processing item: Forrest Gump's box of chocolates(visible, movie, relation, USAEnglish, English)
+2025-05-14 01:21:26,443 - RIA_run_gpt-4o - INFO - Successfully processed item: Forrest Gump's box of chocolates(visible, movie, relation, USAEnglish, English)
+2025-05-14 01:21:27,452 - RIA_run_gpt-4o - INFO - Processing item: 三毛(invisible, art, relation, East Asia, Chinese)
+2025-05-14 01:21:32,189 - RIA_run_gpt-4o - INFO - Successfully processed item: 三毛(invisible, art, relation, East Asia, Chinese)
+2025-05-14 01:21:33,200 - RIA_run_gpt-4o - INFO - Processing item: Sagittarius is opposite to Gemini(invisible, myth, mutual elements, Non-English European, English)
+2025-05-14 01:21:38,563 - RIA_run_gpt-4o - INFO - Successfully processed item: Sagittarius is opposite to Gemini(invisible, myth, mutual elements, Non-English European, English)
+2025-05-14 01:21:39,615 - RIA_run_gpt-4o - INFO - Processing item: Bulletin protection(invisible, ability, relation, NA, English)
+2025-05-14 01:21:45,581 - RIA_run_gpt-4o - INFO - Successfully processed item: Bulletin protection(invisible, ability, relation, NA, English)
+2025-05-14 01:21:46,637 - RIA_run_gpt-4o - INFO - Processing item: Hidden symbols(visible, sense, mutual elements, NA, English)

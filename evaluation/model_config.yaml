@@ -1,0 +1,67 @@
+# MM-OPERA/evaluation/model_config.yaml
+
+# --- API Provider Configurations ---
+# Stores base URLs and how to get API keys for different providers
+api_providers:
+  aigptx: # Example provider name
+    base_url: "https://www.aigptx.top/v1"
+    # Recommended: Store API key in an environment variable
+    # The key in the 'models' section will refer to this environment variable name.
+    # If you absolutely must put a key here (NOT RECOMMENDED FOR PUBLIC REPOS), do so.
+    # api_key: "sk-YOUR_ACTUAL_AIGPTX_KEY_HERE" # Less secure
+    api_key_env_var: "AIGPTX_API_KEY" # Name of the environment variable
+
+  # Example for another provider, e.g., OpenAI
+  # openai:
+  #   base_url: "https://api.openai.com/v1"
+  #   api_key_env_var: "OPENAI_API_KEY"
+
+# --- Model Specific Configurations ---
+# Lists models and their specific settings
+models:
+  gpt-4o:
+    provider: "aigptx" # Must match a key in 'api_providers'
+    endpoint: "/chat/completions" # Appended to the provider's base_url
+    # You can add other model-specific parameters here if needed
+    # e.g., default_max_tokens: 400
+  
+  gemini-1.5-pro-001:
+    provider: "aigptx" # Hypothetical - you'd need to define 'google_vertex' in api_providers
+    endpoint: "/chat/completions"
+    # ...
+
+  # Add other models you plan to support
+
+# --- Evaluation Task Specific Settings ---
+evaluation_settings:
+  ria:
+    prompt: |  # Using YAML multiline string for readability
+      Describe each image briefly.
+      Analyze and explore the relation between the two images, identifying any possible connections, themes, or shared elements.
+      Formulate the output as follows:
+
+      - First image: [image concept]
+      - Second image: [image concept]
+      - Relation: [one keyword, phrase or sentence]
+      - Explanation: [1-5 sentences]
+    default_max_tokens: 300 # Specific to RIA task if not overridden by model
+    num_images_to_process: 2
+
+  # ica: # Example for ICA task
+    # prompt: "Your ICA prompt here..."
+    # default_max_tokens: 500
+
+# --- General Settings ---
+general_settings:
+  # Directory for Hugging Face dataset cache, relative to project root
+  huggingface_cache_dir: "dataset"
+  # Name of the Hugging Face dataset
+  huggingface_dataset_name: "titic/MM-OPERA"
+  
+  # Base directories for outputs, relative to project root
+  results_base_dir: "results"
+  logs_base_dir: "logs"          # It's good practice to have a dedicated logs folder
+  progress_base_dir: "progress"  # And one for progress files
+
+  # Default sleep time between API requests (in seconds)
+  sleep_time_between_requests: 1
