@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+*.egg-info/
+dist/
+build/
+
+# Hugging Face cache (if you don't want to commit its structure, though it's empty by default)
+dataset/*
+!dataset/.gitkeep # Use .gitkeep if you want to keep the empty dir in git
+
+# Results (usually generated, not committed, unless they are example results)
+results/*
+!results/.gitkeep
+!results/RIA_results.json.example # Example result if you want to show format
+# ... add other example result files if needed
+
+# IDE specific
+.idea/
+.vscode/
