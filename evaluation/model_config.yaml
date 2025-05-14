@@ -18,17 +18,19 @@ api_providers:
 
 # --- Model Specific Configurations ---
 # Lists models and their specific settings
+# Ensure your judge model is defined in the 'models' section
 models:
   gpt-4o:
     provider: "aigptx" # Must match a key in 'api_providers'
     endpoint: "/chat/completions" # Appended to the provider's base_url
-    # You can add other model-specific parameters here if needed
-    # e.g., default_max_tokens: 400
   
   gemini-1.5-pro-001:
-    provider: "aigptx" # Hypothetical - you'd need to define 'google_vertex' in api_providers
+    provider: "aigptx"
     endpoint: "/chat/completions"
-    # ...
+
+  gpt-4o-2024-08-06:
+    provider: "aigptx"
+    endpoint: "/chat/completions"
 
   # Add other models you plan to support
 
@@ -47,9 +49,134 @@ evaluation_settings:
     default_max_tokens: 300 # Specific to RIA task if not overridden by model
     num_images_to_process: 2
 
+    reasoning_judge: # New section for RIA reasoning judge
+      # Default judge model, can be overridden by command-line arg
+      default_judge_model_name: "gpt-4o-2024-08-06" 
+      # Max tokens for the judge's response per batch
+      judge_max_tokens_per_batch_multiplier: 250 # Per item in batch. Original had 220.
+      judge_group_size: 1 # How many items to send to the judge in one API call
+      # Sleep time after each judge API call
+      sleep_time_after_judge_api: 3 
+      prompt: | # The detailed prompt for the reasoning judge
+        You are an expert judge evaluating association paths between two image concepts. Your task:
+        1. Analysis Input
+          input: {
+            concepts: [ImageA_desc, ImageB_desc],
+            reference_answer: {
+              relation: string,
+              explanation: string,
+              path: string
+            },
+            mllm_output: {
+              description: [ImageA_desc, ImageB_desc],
+              relation: string,
+              explanation: string
+            }
+          }
+        2. Path Standardization for mllm_output
+          rules: {
+            type1_sequential: "Predicate_{11}(A, X_{11}) and ... and Predicate_{1i}(X_{1i}, X) and Predicate_{21}(X, X_{21}) and ... and Predicate_{2j}(X_{2j}, B)\nA → X_{11} → ... → X_{1i} → X → X_{21} → ... → X_{2j} → B"
+            type2_convergent: "Predicate_{11}(A, X_{11}) and ... and Predicate_{1i}(X_{1i}, X)\nPredicate_{21}(B, X_{21}) and ... and Predicate_{2j}(X_{2j}, X)\nA → X_{11} → ... X_{1i} → X and B → X_{21} → ... → X_{2j} → X" 
+            type3_metaphorical: "A ∧ B → X"
+            format: {
+              - PascalCase for entities/predicates
+              - 'and' for clause connection
+              - '∧' for entity connection
+              - '→' for each association hop
+            }
+          }
+        3. Quality Assessment
+          for each hop in path:
+            score: [
+              float[0-1], // Reasonable: Logical soundness to the ideal relation X
+              float[0-1], // Precise: Specificity and clarity  
+              int[0 or 1]  // Knowledgeable: Domain knowledge depth
+            ]
+            Note: The path don't need to be identical to the reference answer but should demonstrate equivalent quality of reasoning.
+
+        You will receive multiple independent problem-answer pairs in a numbered format:
+        1.\nProblem: ...
+        2.\nProblem: ...
+        Provide your response in JSON format where each key is the problem-answer pair number and the value is your evaluation:
+        {"1": {...},"2": {...}}
+
+        Examples 1:
+        Problem:
+        - First image: Bread and Wine
+        - Second image: 12
+        Reference Answer:
+        - Relation: The Last Supper
+        - Explanation: The Last Supper is a religious painting depicting the final meal Jesus shared with his disciples before his crucifixion. The bread and wine represent the elements of the Eucharist, a central sacrament in Christianity. The number 12 refers to the twelve apostles present at the Last Supper.
+        - Association Path: Depict(TheLastSupper, Eucharist) and Represent(BreadAndWine, Eucharist)\nNumber(TheLastSupper, 12)\nThus, BreadAndWine → Eucharist → TheLastSupper and 12 → TheLastSupper
+        MLLM's Output:
+        - First image: A loaf of bread and a chalice
+        - Second image: The number 12 in gold
+        - Relation: Christian symbolism
+        - Explanation: The first image is a visual representation of the Eucharist, a central sacrament in Christianity, where bread and wine are consecrated and consumed as the body and blood of Jesus Christ. The number 12 holds significant symbolism in Christianity, representing the 12 apostles of Jesus. Together, these images allude to a key aspect of Christian faith and tradition. 
+        Your evaluation:
+        {
+        "path": "Represent(BreadAndWine, Eucharist) and Symbolize(Eucharist, Christian)\nNumber(12, ApostlesOfJesus) and Related(ApostlesOfJesus, Christian)\nThus, BreadAndWine → Eucharist → Christian and 12 → ApostlesOfJesus → Christian", 
+        "hop_quality": {
+        "BreadAndWine → Eucharist": [1.00, 1.00, 1],
+        "Eucharist → Christian": [1.00, 1.00, 1],
+        "12 → ApostlesOfJesus": [1.00, 1.00, 1],
+        "ApostlesOfJesus → Christian": [1.00, 1.00, 1]
+        }
+        "explanation": "The MLLM constructed a well-structured convergent path through Christian symbolism. Both paths (BreadAndWine→Eucharist→Christian and 12→ApostlesOfJesus→Christian) demonstrate perfect scores across all dimensions, showing deep theological understanding and precise use of religious concepts."
+        }
+
+        Examples 2:
+        Problem:
+        - First image: Michelangelo
+        - Second image: ceiling
+        Reference Answer:
+        - Relation: Sistine Chapel ceiling
+        - Explanation: Michelangelo painted the Sistine Chapel ceiling, one of the most famous works of art in the world.
+        - Association Path: PaintedBy(Michelangelo, SistineChapelCeiling)\nRelatedTo(SistineChapelCeiling, ceiling)\nThus, Michelangelo → SistineChapelCeiling → ceiling
+        MLLM's Output:
+        - First image: A portrait of Michelangelo.
+        - Second image: A white, textured ceiling.
+        - Relation: Artistic influence.
+        - Explanation: Michelangelo was a renowned artist known for his intricate details and mastery of form. The ceiling pattern in the second image, with its grid-like design and raised lines, evokes the style and detail often seen in Michelangelo's artwork. Although not directly referencing a specific piece, the ceiling's texture suggests an artistic inspiration from a master like Michelangelo, reflecting a respect for classical art and the lasting influence it continues to have on contemporary design.
+        Your evaluation:
+        {
+        "path": "Represent(Michelangelo, ArtisticInfluence)\nEvoke(Ceiling, MichelangeloArtwork) and Suggest(MichelangeloArtwork, ArtisticInfluence)\nThus, Michelangelo → ArtisticInfluence and Ceiling → MichelangeloArtwork → ArtisticInfluence", 
+        "hop_quality": {
+        "Michelangelo → ArtisticInfluence": [0.95, 0.18, 1],
+        "Ceiling → MichelangeloArtwork": [0.07, 0.34, 1],
+        "MichelangeloArtwork → ArtisticInfluence": [0.96, 0.16, 0],
+        }, 
+        "explanation": "While logically sound, the MLLM's path relies on general artistic influence rather than identifying the iconic Sistine Chapel connection. The first hop maintains high reasonableness but lacks specificity, while subsequent hops show diminishing quality due to vague artistic associations."
+        }
+
+        Examples 3:
+        Problem:
+        - First image: bread with butter
+        - Second image: a falling cat
+        Reference Answer:
+        - Relation: Buttered cat paradox
+        - Explanation: The Buttered Cat Paradox is a humorous thought experiment that involves a cat with buttered toast strapped to its back.
+        - Association Path: Butter ∧ Cat → ButteredCatParadox
+        MLLM's Output:
+        - First image: A slice of bread with butter spread on it, next to a knife and a piece of butter on a table.
+        - Second image: A cat in mid-air, appearing to be jumping or falling against a white background.
+        - Relation: Contrast between stillness and movement.
+        - Explanation: The first image depicts a static scene of preparing food, while the second image captures a dynamic moment of a cat in motion. The contrast highlights the difference between the calmness of everyday tasks and the energy of an animal's movement.
+        Your evaluation:
+        {
+        "path": "PreparingFood ∧ CatInMotion → ContrastBetweenStillnessAndMovement", 
+        "hop_quality": {
+        "PreparingFood ∧ CatInMotion → ContrastBetweenStillnessAndMovement": [0.78, 0.14, 0],
+        }, 
+        "explanation": "The MLLM constructed a superficial static-dynamic contrast, missing the cultural reference to the 'Buttered Cat Paradox'. While the observation is logically reasonable, it lacks both precision and knowledge depth by failing to recognize the underlying thought experiment."
+        }
+
+
   # ica: # Example for ICA task
     # prompt: "Your ICA prompt here..."
     # default_max_tokens: 500
+
+
 
 # --- General Settings ---
 general_settings:

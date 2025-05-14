@@ -5,7 +5,11 @@ import logging
 import base64
 import io
 from pathlib import Path
-from PIL import Image  # Assuming PIL.Image objects from Hugging Face dataset
+from PIL import (
+    Image,
+    UnidentifiedImageError,
+)  # Assuming PIL.Image objects from Hugging Face dataset
+import tqdm
 
 # Dynamically determine project root assuming utils.py is in MM-OPERA/evaluation/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -110,6 +114,102 @@ def encode_pil_image_to_base64(
     except Exception as e:
         print(f"Error encoding PIL image: {e}")
         return None, None
+
+
+# In your utils.py or equivalent
+from tqdm import tqdm
+from PIL import (
+    UnidentifiedImageError,
+)  # Ensure this (or relevant PIL error) is imported if type checking
+
+# It's good practice to also import 'logging' if you type hint the logger
+import logging
+
+
+def safe_dataset_iterator_with_error_info(
+    dataset_split, logger: logging.Logger, desc="Iterating safely"
+):
+    """
+    Iterates over a Hugging Face dataset split, skipping items that cause specific errors.
+    Yields (original_index, item) for successful items.
+    Logs skipped items using the provided logger.
+    Returns a list of skipped items' information.
+    """
+    total_len = len(dataset_split)
+    skipped_items_log = []  # To store info about skipped items
+
+    # position=1 and leave=False are good for nested tqdm bars if the main loop also has one
+    # mininterval can prevent overly frequent updates
+    pbar_iterator = tqdm(
+        range(total_len),
+        desc=desc,
+        total=total_len,
+        leave=False,
+        position=1,
+        mininterval=0.5,
+    )
+
+    for idx in pbar_iterator:
+        # Update description for the inner progress bar
+        pbar_iterator.set_description_str(f"{desc} (Checking idx {idx})")
+        try:
+            item = dataset_split[idx]
+            yield idx, item  # Yield original index and the item
+        except (
+            SyntaxError,
+            UnidentifiedImageError,
+        ) as e:  # Add other PIL specific errors if necessary
+            error_message = str(e)
+            error_type_name = type(e).__name__
+            if (
+                "not a TIFF file" in error_message
+                or ("header" in error_message and "not valid" in error_message)
+                or "cannot identify image file" in error_message
+            ):
+                logger.warning(  # Use logger.warning or logger.error as appropriate
+                    f"[Safe Iterator] Skipping item at original index {idx} due to known image error: {error_type_name} - {error_message}"
+                )
+                skipped_items_log.append(
+                    {"index": idx, "reason": error_message, "type": error_type_name}
+                )
+                continue
+            else:  # Other SyntaxError/UnidentifiedImageError
+                logger.error(  # Potentially more severe if it's an unexpected variant
+                    f"[Safe Iterator] Skipping item at original index {idx} due to other {error_type_name}: {error_message}"
+                )
+                skipped_items_log.append(
+                    {
+                        "index": idx,
+                        "reason": error_message,
+                        "type": f"Other {error_type_name}",
+                    }
+                )
+                continue
+        except Exception as e:  # Other generic errors
+            error_message = str(e)
+            error_type_name = type(e).__name__
+            logger.error(
+                f"[Safe Iterator] Skipping item at original index {idx} due to generic error: {error_type_name} - {error_message}"
+            )
+            skipped_items_log.append(
+                {
+                    "index": idx,
+                    "reason": error_message,
+                    "type": f"Generic {error_type_name}",
+                }
+            )
+            continue
+
+    if skipped_items_log:
+        logger.info(
+            f"[Safe Iterator] Completed. Skipped a total of {len(skipped_items_log)} items during iteration for '{desc}'."
+        )
+    else:
+        logger.info(
+            f"[Safe Iterator] Completed. No items were skipped during iteration for '{desc}'."
+        )
+
+    return skipped_items_log
 
 
 if __name__ == "__main__":
