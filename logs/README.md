@@ -1,1 +1,1 @@
-# Log Folder
+# Folder to Save Log Files
