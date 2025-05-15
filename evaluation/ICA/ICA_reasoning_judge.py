@@ -531,7 +531,7 @@ def main():
 
         logger = setup_logger(f"ICA_ReasoningJudge_{model_to_judge_name}", log_file)
         logger.info(
-            f"Starting ICA reasoning judgement for MLLM: {model_to_judge_name} using Judge: {judge_model_name_arg}"
+            f"--- Starting ICA reasoning judgement for MLLM: {model_to_judge_name} using Judge: {judge_model_name_arg} ---"
         )
         # ... (log other paths)
 

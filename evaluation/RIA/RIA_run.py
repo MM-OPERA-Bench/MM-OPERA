@@ -51,7 +51,8 @@ def analyze_image_relationships_hf(
         logger.error(f"Configuration for model '{model_name}' not found.")
         return {}
 
-    provider_name = model_config["provider"]
+    model_identifier = model_config.get("model_identifier") or model_name
+    provider_name = model_config.get("provider")
     provider_config = config["api_providers"].get(provider_name)
     if not provider_config:
         logger.error(f"Configuration for provider '{provider_name}' not found.")
@@ -68,7 +69,7 @@ def analyze_image_relationships_hf(
         )
         return {}
 
-    api_url = provider_config.get("base_url", "") + model_config.get("endpoint", "")
+    api_url = f"{provider_config.get('base_url', '').rstrip('/')}/{model_config.get('endpoint', '').lstrip('/')}"
     if not api_url:
         logger.error(
             f"Could not construct API URL for model '{model_name}'. Missing base_url or endpoint."
@@ -82,9 +83,9 @@ def analyze_image_relationships_hf(
         "default_max_tokens", ria_settings.get("default_max_tokens", 300)
     )
     num_images_to_process = ria_settings.get("num_images_to_process", 2)
-    sleep_time = config.get("general_settings", {}).get(
-        "sleep_time_between_requests", 1
-    )
+    sleep_time = ria_settings.get("sleep_time_after_judge_api") or config.get(
+        "general_settings", {}
+    ).get("sleep_time_between_requests", 1)
 
     current_run_results_batch = {}  # Results for this specific run/batch
 
@@ -214,7 +215,7 @@ def analyze_image_relationships_hf(
                 continue
 
             payload = {
-                "model": model_name,  # Or the specific model string expected by the API if different
+                "model": model_identifier,  # Or the specific model string expected by the API if different
                 "messages": [
                     {"role": "system", "content": prompt_template},
                     {"role": "user", "content": user_content},
@@ -345,7 +346,7 @@ def main():
     parser.add_argument(
         "--model_name",
         type=str,
-        required=True,
+        # required=True,
         help="Name of the model to evaluate (must be defined in model_config.yaml).",
     )
     # You can add more arguments, e.g., --dataset_subset, --config_file
@@ -355,6 +356,10 @@ def main():
     try:
         # --- 1. Load Configuration ---
         config = get_config()  # Uses default path: evaluation/model_config.yaml
+        if not model_name_to_run:
+            model_name_to_run = config["evaluation_settings"]["ria"][
+                "default_model_name"
+            ]
 
         # --- 2. Setup Paths ---
         # Output paths based on project root and config
@@ -367,12 +372,12 @@ def main():
         logs_dir.mkdir(parents=True, exist_ok=True)
 
         # Specific file paths for this run
-        log_file_path = logs_dir / f"RIA_{model_name_to_run}.log"
-        results_file_path = results_dir / f"RIA_{model_name_to_run}_results.json"
+        log_file_path = logs_dir / f"{model_name_to_run}_RIA_run.log"
+        results_file_path = results_dir / f"{model_name_to_run}_RIA_results.json"
 
         # --- 3. Setup Logger ---
-        logger = setup_logger(f"RIA_run_{model_name_to_run}", log_file_path)
-        logger.info(f"Starting RIA evaluation for model: {model_name_to_run}")
+        logger = setup_logger(f"{model_name_to_run}_RIA_run", log_file_path)
+        logger.info(f"--- Starting RIA evaluation for model: {model_name_to_run} ---")
         logger.info(f"Using project root: {PROJECT_ROOT}")
         logger.info(f"Results will be saved to: {results_file_path}")
         logger.info(f"Logs will be saved to: {log_file_path}")

@@ -110,6 +110,11 @@ def perform_reasoning_judgment(
         "Content-Type": "application/json",
     }
 
+    judge_model_identifier = (
+        judge_model_config.get("model_identifier") or judge_model_name
+    )
+
+    general_config = config["general_settings"]
     ria_judge_settings = config["evaluation_settings"]["ria"]["reasoning_judge"]
     system_prompt = ria_judge_settings["prompt"]
     group_size = ria_judge_settings["judge_group_size"]
@@ -118,7 +123,9 @@ def perform_reasoning_judgment(
     judge_max_tokens = (
         ria_judge_settings["judge_max_tokens_per_batch_multiplier"] * group_size
     )
-    sleep_time = ria_judge_settings["sleep_time_after_judge_api"]
+    sleep_time = ria_judge_settings.get(
+        "sleep_time_after_judge_api"
+    ) or general_config.get("sleep_time_between_judge_requests", 7)
 
     # Load existing results
     existing_judgements = load_json(output_file_path) or {}
@@ -204,7 +211,7 @@ def perform_reasoning_judgment(
             full_user_prompt = "\n\n".join(user_prompts_for_batch)
 
             payload = {
-                "model": judge_model_name,
+                "model": judge_model_identifier,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": full_user_prompt},
@@ -348,19 +355,19 @@ def main():
         description="Perform reasoning judgement on RIA MLLM outputs."
     )
     parser.add_argument(
-        "--model_name",
+        "--test_model_name",
         type=str,
-        required=True,
-        help="Name of the MLLM whose results are being judged (e.g., gpt-4o, qwen-vl-plus-0809). Must match a model defined in model_config.yaml.",
+        # required=True,
+        help="Name of the MLLM whose results are being judged (e.g., Gemini-2.0-Flash-Thinking-Exp). Must match a model defined in model_config.yaml.",
     )
     parser.add_argument(
         "--judge_model_name",
         type=str,
-        default=None,  # Will use default from config if not provided
-        help="Name of the LLM to use as the judge (e.g., gpt-4o-2024-08-06). Must be defined in model_config.yaml.",
+        default=None,
+        help="Name of the LLM to use as the judge (e.g., GPT-4o-judge). Must be defined in model_config.yaml.",
     )
     args = parser.parse_args()
-    model_to_judge_name = args.model_name
+    test_model_to_judge = args.test_model_name
 
     try:
         # --- 1. Load Configuration ---
@@ -384,22 +391,22 @@ def main():
         results_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
 
-        log_file_path = logs_dir / f"RIA_{model_to_judge_name}_reasoning_judge.log"
+        log_file_path = logs_dir / f"{test_model_to_judge}_RIA_reasoning_judge.log"
         # Input file: results from RIA_run.py for the model being judged
         mllm_results_input_path = (
-            results_dir / f"RIA_{model_to_judge_name}_results.json"
+            results_dir / f"{test_model_to_judge}_RIA_results.json"
         )
         # Output file for reasoning scores
         reasoning_output_path = (
-            results_dir / f"RIA_{model_to_judge_name}_reasoning_scoring.json"
+            results_dir / f"{test_model_to_judge}_RIA_reasoning_scoring.json"
         )
 
         # --- 3. Setup Logger ---
         logger = setup_logger(
-            f"RIA_ReasoningJudge_{model_to_judge_name}", log_file_path
+            f"{test_model_to_judge}_RIA_reasoning_judge", log_file_path
         )
         logger.info(
-            f"Starting RIA reasoning judgement for MLLM: {model_to_judge_name} using Judge: {final_judge_model_name}"
+            f"--- Starting RIA reasoning judgement for MLLM: {test_model_to_judge} using Judge: {final_judge_model_name} ---"
         )
         logger.info(f"Project root: {PROJECT_ROOT}")
         logger.info(f"MLLM results (input): {mllm_results_input_path}")
@@ -408,7 +415,7 @@ def main():
         # --- 4. Load MLLM Results ---
         if not mllm_results_input_path.exists():
             logger.error(
-                f"MLLM results file not found: {mllm_results_input_path}. Please run RIA_run.py for '{model_to_judge_name}' first."
+                f"MLLM results file not found: {mllm_results_input_path}. Please run RIA_run.py for '{test_model_to_judge}' first."
             )
             return
         mllm_results = load_json(mllm_results_input_path)
@@ -496,7 +503,7 @@ def main():
 
         # --- 6. Perform Judgement ---
         perform_reasoning_judgment(
-            model_to_judge_name=model_to_judge_name,
+            model_to_judge_name=test_model_to_judge,
             judge_model_name=final_judge_model_name,
             dataset_ria_split=dataset_ria_split,
             mllm_results=mllm_results,

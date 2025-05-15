@@ -5,8 +5,6 @@ import requests
 import argparse
 from pathlib import Path
 import yaml
-import base64
-import os
 import json
 from tqdm import tqdm
 
@@ -470,7 +468,7 @@ def main():
     parser.add_argument(
         "--model_name",
         type=str,
-        required=True,
+        # required=True,
         help="Name of the model to evaluate (must be defined in model_config.yaml).",
     )
     args = parser.parse_args()
@@ -479,6 +477,10 @@ def main():
     _logger_for_early_errors = None
     try:
         config = get_config()
+        if not model_name_to_run:
+            model_name_to_run = config["evaluation_settings"]["ica"][
+                "default_model_name"
+            ]
 
         results_dir = PROJECT_ROOT / config["general_settings"]["results_base_dir"]
         logs_dir = PROJECT_ROOT / config["general_settings"]["logs_base_dir"]
@@ -486,16 +488,16 @@ def main():
         results_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
 
-        log_file_path = logs_dir / f"ICA_{model_name_to_run}.log"
-        results_file_path = results_dir / f"ICA_{model_name_to_run}_results.json"
+        log_file_path = logs_dir / f"{model_name_to_run}_ICA_run.log"
+        results_file_path = results_dir / f"{model_name_to_run}_ICA_results.json"
 
         # Initialize the global logger
-        logger = setup_logger(f"ICA_run_{model_name_to_run}", log_file_path)
+        logger = setup_logger(f"{model_name_to_run}_ICA_run", log_file_path)
         _logger_for_early_errors = (
             logger  # Assign to the temp logger as well now that it's initialized
         )
 
-        logger.info(f"Starting ICA evaluation for model: {model_name_to_run}")
+        logger.info(f"--- Starting ICA evaluation for model: {model_name_to_run} ---")
         logger.info(f"Using project root: {PROJECT_ROOT}")
         logger.info(f"Results will be saved to: {results_file_path}")
         logger.info(f"Logs will be saved to: {log_file_path}")
@@ -505,9 +507,6 @@ def main():
         )
         hf_cache_dir_path.mkdir(parents=True, exist_ok=True)
         hf_config.HF_DATASETS_CACHE = str(hf_cache_dir_path)
-        os.environ["HF_DATASETS_CACHE"] = str(
-            hf_cache_dir_path
-        )  # Also set environment variable
         logger.info(
             f"Hugging Face cache directory set to: {hf_config.HF_DATASETS_CACHE}"
         )
@@ -515,9 +514,7 @@ def main():
         hf_dataset_name = config["general_settings"]["huggingface_dataset_name"]
 
         try:
-            dataset = load_dataset(
-                hf_dataset_name, cache_dir=str(hf_cache_dir_path)
-            )  # Pass string path
+            dataset = load_dataset(hf_dataset_name)
             logger.info(f"Dataset '{hf_dataset_name}' loaded successfully.")
         except Exception as e:
             logger.error(

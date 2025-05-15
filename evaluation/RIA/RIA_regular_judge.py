@@ -9,9 +9,6 @@ from pathlib import Path
 import yaml
 from tqdm import tqdm
 
-# Assuming config_loader.py and utils.py are in a directory one level above
-# e.g., MM-OPERA/evaluation/
-# and this script is in MM-OPERA/evaluation/RIA/
 try:
     from ..config_loader import get_config, get_api_key, PROJECT_ROOT
     from ..utils import setup_logger, save_json, load_json
@@ -28,9 +25,9 @@ except ImportError:
 
 # Hugging Face datasets library
 from datasets import load_dataset
-from datasets import config as hf_config  # To set cache directory
+from datasets import config as hf_config
 
-# Global logger, will be initialized in main
+# Global logger
 logger = None
 
 # =======================
@@ -152,7 +149,11 @@ def generate_individual_prompts(item_data_ground_truth, mllm_item_result):
 
 
 def judge_model_results_main(
-    ground_truth_data, mllm_results_data, config, judge_scores_output_file
+    ground_truth_data,
+    mllm_results_data,
+    config,
+    judge_model_name_arg,
+    judge_scores_output_file,
 ):
     """
     Main function to orchestrate the judging process.
@@ -172,12 +173,16 @@ def judge_model_results_main(
             f"No existing judge results found at {judge_scores_output_file}. Starting fresh."
         )
 
-    ria_judge_config = config["evaluation_settings"]["ria_judge"]
+    ria_judge_config = config["evaluation_settings"]["ria"]["regular_judge"]
     general_config = config["general_settings"]
 
-    judge_model_name = ria_judge_config["judge_model_name"]
-    judge_model_provider_name = ria_judge_config["judge_model_provider"]
-
+    if not judge_model_name_arg:
+        judge_model_name_arg = ria_judge_config.get("default_judge_model_name")
+        if not judge_model_name_arg:
+            raise ValueError(
+                "Judge model name not provided via argument and not found in config's default_judge_model_name."
+            )
+    judge_model_name = judge_model_name_arg
     judge_model_specific_config = config["models"].get(judge_model_name)
     if not judge_model_specific_config:
         logger.error(
@@ -185,6 +190,7 @@ def judge_model_results_main(
         )
         return judge_results
 
+    judge_model_provider_name = judge_model_specific_config.get("provider")
     judge_api_provider_config = config["api_providers"].get(judge_model_provider_name)
     if not judge_api_provider_config:
         logger.error(
@@ -196,7 +202,9 @@ def judge_model_results_main(
     judge_endpoint = judge_model_specific_config.get("endpoint", "/chat/completions")
     judge_api_url = f"{judge_base_url.rstrip('/')}/{judge_endpoint.lstrip('/')}"
 
-    judge_model_identifier = judge_model_specific_config["model_identifier"]
+    judge_model_identifier = (
+        judge_model_specific_config.get("model_identifier") or judge_model_name
+    )
     judge_api_key = get_api_key(judge_model_name)
     if not judge_api_key:
         logger.error(
@@ -210,7 +218,7 @@ def judge_model_results_main(
     }
 
     judge_prompt_template = ria_judge_config["prompt"]
-    judge_group_size = ria_judge_config.get("judge_group_size", 5)
+    judge_group_size = ria_judge_config.get("judge_group_size", 1)
 
     # Calculate max tokens for judge response
     default_max_tokens_per_item = ria_judge_config.get(
@@ -220,13 +228,15 @@ def judge_model_results_main(
         "default_max_tokens_judge", default_max_tokens_per_item * judge_group_size
     )
 
-    sleep_time = general_config.get("sleep_time_between_judge_requests", 7)
+    sleep_time = ria_judge_config.get(
+        "sleep_time_after_judge_api"
+    ) or general_config.get("sleep_time_between_judge_requests", 7)
 
     # Prepare batches of prompts for unjudged items
     all_prompts = []
     for item_id, mllm_result in mllm_results_data.items():
         if item_id in judge_results and "score_4o" in judge_results[item_id]:
-            logger.info(f"Item {item_id} already judged. Skipping.")
+            # logger.info(f"Item {item_id} already judged. Skipping.")
             continue
 
         # Find matching ground truth item
@@ -262,9 +272,9 @@ def judge_model_results_main(
         batch_end = min(batch_start + judge_group_size, len(all_prompts))
         current_batch = all_prompts[batch_start:batch_end]
 
-        logger.info(
-            f"Processing batch {batch_start//judge_group_size + 1}/{total_batches}"
-        )
+        # logger.info(
+        #     f"Processing batch {batch_start//judge_group_size + 1}/{total_batches}"
+        # )
 
         combined_prompt, item_id_mapping = generate_prompt_batch(current_batch)
         payload = generate_payload_batch(
@@ -298,13 +308,18 @@ def judge_model_results_main(
                     idx_str = str(idx)
                     if idx_str in parsed_response:
                         judge_results[item_id] = parsed_response[idx_str]
-                        logger.info(
-                            f"Successfully judged item {item_id}: {parsed_response[idx_str]}"
-                        )
+                        # logger.info(
+                        #     f"Successfully judged item {item_id}: {parsed_response[idx_str]}"
+                        # )
                     else:
                         logger.warning(
                             f"No judge result for item {item_id} in response."
                         )
+
+                save_json(judge_results, judge_scores_output_file)
+                # logger.info(
+                #     f"Intermediate judge scores saved to {judge_scores_output_file} after batch {batch_start//judge_group_size + 1}/{total_batches}"
+                # )
 
             except json.JSONDecodeError as e:
                 logger.error(
@@ -313,7 +328,7 @@ def judge_model_results_main(
                 continue
 
             # Sleep to avoid rate limits
-            logger.info(f"Sleeping for {sleep_time} seconds to avoid rate limits...")
+            # logger.info(f"Sleeping for {sleep_time} seconds to avoid rate limits...")
             time.sleep(sleep_time)
 
         except requests.exceptions.RequestException as e:
@@ -365,8 +380,14 @@ def main():
     parser.add_argument(
         "--test_model_name",
         type=str,
-        required=True,
-        help="Name of the MLLM whose results are to be judged (must match how its results file is named, e.g., 'gpt-4o').",
+        # required=True,
+        help="Name of the MLLM whose results are to be judged (must match how its results file is named, e.g., 'Gemini-2.0-Flash-Thinking-Exp').",
+    )
+    parser.add_argument(
+        "--judge_model_name",
+        type=str,
+        default=None,
+        help="Name of the LLM to use as the judge (e.g., GPT-4o-judge). Must be defined in model_config.yaml.",
     )
     args = parser.parse_args()
     test_model_to_judge = args.test_model_name
@@ -374,6 +395,10 @@ def main():
     temp_logger_for_config_errors = None
     try:
         config = get_config()
+        if not test_model_to_judge:
+            test_model_to_judge = config["evaluation_settings"]["ria"][
+                "default_model_name"
+            ]
 
         results_base_dir = PROJECT_ROOT / config["general_settings"]["results_base_dir"]
         logs_base_dir = PROJECT_ROOT / config["general_settings"]["logs_base_dir"]
@@ -381,24 +406,26 @@ def main():
         results_base_dir.mkdir(parents=True, exist_ok=True)
         logs_base_dir.mkdir(parents=True, exist_ok=True)
 
-        mllm_results_file = results_base_dir / f"RIA_{test_model_to_judge}_results.json"
+        mllm_results_file = results_base_dir / f"{test_model_to_judge}_RIA_results.json"
 
-        judge_log_file = logs_base_dir / f"RIA_judge_{test_model_to_judge}.log"
+        judge_log_file = logs_base_dir / f"{test_model_to_judge}_RIA_regular_judge.log"
         judge_scores_output_file = (
-            results_base_dir / f"RIA_judge_{test_model_to_judge}_scores.json"
+            results_base_dir / f"{test_model_to_judge}_RIA_regular_scoring.json"
         )
-        combined_output_file = (
-            results_base_dir / f"RIA_combined_{test_model_to_judge}_results.json"
-        )
+        # combined_output_file = (
+        #     results_base_dir / f"{test_model_to_judge}_RIA_regular_combined_results.json"
+        # )
 
-        logger = setup_logger(f"RIA_judge_{test_model_to_judge}", judge_log_file)
+        logger = setup_logger(
+            f"{test_model_to_judge}_RIA_regular_judge", judge_log_file
+        )
         temp_logger_for_config_errors = logger
 
         logger.info(f"--- Starting RIA Judging for MLLM: {test_model_to_judge} ---")
         logger.info(f"Using Project Root: {PROJECT_ROOT}")
         logger.info(f"Reading MLLM results from: {mllm_results_file}")
         logger.info(f"Saving judge scores to: {judge_scores_output_file}")
-        logger.info(f"Saving combined results to: {combined_output_file}")
+        # logger.info(f"Saving combined results to: {combined_output_file}")
         logger.info(f"Logging to: {judge_log_file}")
 
         config["general_settings"]["current_judge_file_path"] = str(
@@ -445,8 +472,8 @@ def main():
             col for col in dataset["ria"].column_names if col.startswith("image")
         ]
         dataset_ria_split = dataset["ria"].remove_columns(image_columns)
-        logger.info(f"Removed image columns: {image_columns}")
-        logger.info(f"Remaining columns: {dataset_ria_split.column_names}")
+        # logger.info(f"Removed image columns: {image_columns}")
+        # logger.info(f"Remaining columns: {dataset_ria_split.column_names}")
 
         # Convert dataset to list of dictionaries
         ground_truth_data_loaded = [item for item in dataset_ria_split]
@@ -463,6 +490,7 @@ def main():
             ground_truth_data_loaded,
             mllm_results_data_loaded,
             config,
+            args.judge_model_name,
             judge_scores_output_file,
         )
 
@@ -472,14 +500,14 @@ def main():
             f"All judge scores finalized and saved to {judge_scores_output_file}"
         )
 
-        combined_data_final = combine_results_and_judgements(
-            mllm_results_data_loaded, final_judge_scores_data
-        )
+        # combined_data_final = combine_results_and_judgements(
+        #     mllm_results_data_loaded, final_judge_scores_data
+        # )
 
-        save_json(combined_data_final, combined_output_file)
-        logger.info(
-            f"Combined MLLM results and judge scores saved to {combined_output_file}"
-        )
+        # save_json(combined_data_final, combined_output_file)
+        # logger.info(
+        #     f"Combined MLLM results and judge scores saved to {combined_output_file}"
+        # )
 
         logger.info(f"--- RIA Judging finished for MLLM: {test_model_to_judge} ---")
     except FileNotFoundError as fnf_e:
