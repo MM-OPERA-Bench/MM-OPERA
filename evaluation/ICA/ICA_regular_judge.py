@@ -7,16 +7,12 @@ import time
 import argparse
 from pathlib import Path
 import yaml
-from tqdm import tqdm  # Import tqdm for progress bars
+from tqdm import tqdm
 
-# Assuming config_loader.py and utils.py are in a directory one level above
-# e.g., MM-OPERA/evaluation/
-# and this script is in MM-OPERA/evaluation/ICA/
 try:
     from ..config_loader import get_config, get_api_key, PROJECT_ROOT
     from ..utils import setup_logger, save_json, load_json
 except ImportError:
-    # Fallback for direct execution if paths are not set up for relative imports
     print(
         "Failed to import from parent directory. Ensure script is run in a way that allows relative imports, or adjust sys.path."
     )
@@ -28,7 +24,7 @@ except ImportError:
 
 # Hugging Face datasets library
 from datasets import load_dataset
-from datasets import config as hf_config  # To set cache directory
+from datasets import config as hf_config
 
 
 # Global logger, will be initialized in main
@@ -556,7 +552,7 @@ def judge_model_results_main(
                     )
                     raise json.JSONDecodeError(
                         "Decoded JSON is not a dictionary", judge_response_text, 0
-                    )  # Raise to trigger error handling
+                    )
 
             except json.JSONDecodeError as jde:
                 tqdm.write(

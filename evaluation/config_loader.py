@@ -99,7 +99,6 @@ if __name__ == "__main__":
     try:
         cfg = get_config()
         print("Config loaded successfully!")
-        # print(cfg)
         print(
             f"GPT-4o API Key (from env if AIGPTX_API_KEY is set): {get_api_key('gpt-4o')}"
         )

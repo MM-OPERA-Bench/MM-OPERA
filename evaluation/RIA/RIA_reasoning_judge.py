@@ -335,9 +335,7 @@ def perform_reasoning_judgment(
                 #         "error": f"Unexpected error: {str(e)}"
                 #     }
             finally:
-                # 每批次后保存结果
                 save_json(existing_judgements, output_file_path)
-                # 更新已处理项目集合
                 processed_item_ids = set(existing_judgements.keys())
                 pbar.update(len(batch))
                 if i + group_size < len(
@@ -537,10 +535,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # To run (from MM-OPERA project root):
-    # python -m evaluation.RIA.RIA_reasoning_judge --model_name gpt-4o
-    # (This will judge gpt-4o's RIA outputs using the default judge model from config)
-    #
-    # Or specify the judge model:
-    # python -m evaluation.RIA.RIA_reasoning_judge --model_name qwen-vl-plus-0809 --judge_model_name gpt-4o-2024-08-06
     main()

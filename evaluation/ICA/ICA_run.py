@@ -76,11 +76,11 @@ def analyze_image_relationships_hf(
 
         try:
             api_key = get_api_key(model_name)
-        except NameError:  # Fallback if get_api_key is not defined in this scope
+        except NameError:
             logger.error(
                 "'get_api_key' function not found. API key cannot be retrieved."
             )
-            api_key = None  # Or fetch from config if available there
+            api_key = None
         if not api_key:
             logger.error(
                 f"API key for model '{model_name}' could not be retrieved. Skipping."
@@ -121,7 +121,6 @@ def analyze_image_relationships_hf(
     all_results = load_json(results_file_path) or {}
     logger.info(f"Loaded {len(all_results)} existing results from {results_file_path}")
 
-    # 从结果文件中获取已处理的项目ID
     processed_item_ids = set(all_results.keys())
     logger.info(f"Found {len(processed_item_ids)} processed item IDs in results file")
 
@@ -129,7 +128,6 @@ def analyze_image_relationships_hf(
     total_items = len(dataset_ica_split)
     logger.info(f"Processing {total_items} items from the ICA dataset split.")
 
-    # 使用安全的数据集迭代器
     safe_gen = safe_dataset_iterator_with_error_info(
         dataset_ica_split, logger=logger, desc=f"ICA SafeIter {model_name}"
     )
@@ -169,7 +167,7 @@ def analyze_image_relationships_hf(
                         # logger.info(
                         #     f"Item {item_id_str} (index {idx+1}/{total_items}) already processed with valid results. Skipping."
                         # )
-                        main_pbar.update(1)  # 更新主进度条
+                        main_pbar.update(1)
                         continue
                 elif (
                     not item_data_in_results
@@ -203,7 +201,7 @@ def analyze_image_relationships_hf(
                     f"Error: Insufficient images ({num_available_images} provided, {required_images_for_item} required)"
                 ] * (4 if rotate_test else 1)
                 save_json(all_results, results_file_path)
-                main_pbar.update(1)  # 更新主进度条
+                main_pbar.update(1)
                 continue
 
             encoded_images_data = []
@@ -234,7 +232,7 @@ def analyze_image_relationships_hf(
                     f"Error: Image encoding failed - {e}"
                 ] * num_sub_tests_for_error
                 save_json(all_results, results_file_path)
-                main_pbar.update(1)  # 更新主进度条
+                main_pbar.update(1)
                 continue
 
             item_responses = all_results.get(item_id_str, [])

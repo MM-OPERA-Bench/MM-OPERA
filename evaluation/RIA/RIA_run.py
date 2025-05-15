@@ -28,7 +28,7 @@ PROJECT_ROOT = UTILS_PROJECT_ROOT  # Use one consistent project root
 
 # Hugging Face datasets library
 from datasets import load_dataset
-from datasets import config as hf_config  # To set cache directory
+from datasets import config as hf_config
 
 # Global logger, will be initialized in main
 logger = None
@@ -91,7 +91,6 @@ def analyze_image_relationships_hf(
 
     current_run_results_batch = {}  # Results for this specific run/batch
 
-    # 从结果文件中加载已处理的项目
     processed_item_ids = set()
     try:
         all_results = load_json(results_file_path) or {}
@@ -351,7 +350,6 @@ def main():
         # required=True,
         help="Name of the model to evaluate (must be defined in model_config.yaml).",
     )
-    # You can add more arguments, e.g., --dataset_subset, --config_file
     args = parser.parse_args()
     model_name_to_run = args.model_name
 
@@ -407,7 +405,6 @@ def main():
             )
             return  # Exit if dataset cannot be loaded
 
-        # Assuming 'ria' is a split/configuration in your dataset
         if "ria" not in dataset:
             logger.error(
                 f"'ria' split not found in dataset '{hf_dataset_name}'. Available splits: {list(dataset.keys())}"
@@ -448,9 +445,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # Before running, ensure:
-    # 1. model_config.yaml is in MM-OPERA/evaluation/
-    # 2. Environment variables for API keys (e.g., AIGPTX_API_KEY) are set.
-    # To run: python -m evaluation.RIA.RIA_run --model_name gpt-4o
-    # (Run from the MM-OPERA project root directory)
     main()

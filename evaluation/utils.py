@@ -227,17 +227,3 @@ if __name__ == "__main__":
     loaded_data = load_json(test_json_path)
     if loaded_data:
         logger.info(f"Loaded test JSON: {loaded_data}")
-
-    # To test image encoding, you'd need a PIL.Image object
-    # from PIL import Image
-    # try:
-    #     # Create a dummy image (requires Pillow to be installed)
-    #     img = Image.new('RGB', (60, 30), color = 'red')
-    #     img.format = 'PNG' # Manually set format for this dummy
-    #     b64_str, mime = encode_pil_image_to_base64(img)
-    #     if b64_str:
-    #         logger.info(f"Dummy image encoded. Mime: {mime}, Base64 (first 20 chars): {b64_str[:20]}...")
-    # except ImportError:
-    #     logger.warning("Pillow not installed, skipping PIL image encoding test.")
-    # except Exception as e:
-    #     logger.error(f"Error in PIL image test: {e}")

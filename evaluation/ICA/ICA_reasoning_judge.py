@@ -289,7 +289,6 @@ def perform_ica_reasoning_judgment(
             )
 
         for perm_idx in range(num_permutations_to_judge):
-            # 修改这里：检查是否为None或包含error字段
             if existing_judgements[item_id][perm_idx] is not None and not (
                 isinstance(existing_judgements[item_id][perm_idx], dict)
                 and "error" in existing_judgements[item_id][perm_idx]

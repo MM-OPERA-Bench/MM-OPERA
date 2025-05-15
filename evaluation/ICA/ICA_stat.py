@@ -454,11 +454,10 @@ def analyze_regular_judge(model_name, config, metadata_map):
 
 
 def calculate_reasoning_score(hop_quality):
-    """计算reasoning score"""
+    """Calculate reasoning score"""
     try:
         score_list = []
         for hop, hop_score_list in hop_quality.items():
-            # Ensure hop_score_list is a valid list and contains 3 elements
             if not isinstance(hop_score_list, list) or len(hop_score_list) != 3:
                 print(f"Invalid hop score format for {hop}: {hop_score_list}")
                 continue

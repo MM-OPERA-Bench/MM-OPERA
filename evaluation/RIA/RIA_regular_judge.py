@@ -13,7 +13,6 @@ try:
     from ..config_loader import get_config, get_api_key, PROJECT_ROOT
     from ..utils import setup_logger, save_json, load_json
 except ImportError:
-    # Fallback for direct execution if paths are not set up for relative imports
     print(
         "Failed to import from parent directory. Ensure script is run in a way that allows relative imports, or adjust sys.path."
     )
@@ -94,10 +93,10 @@ def generate_individual_prompts(item_data_ground_truth, mllm_item_result):
     Returns:
         dict: Contains 'item_id' and 'user_prompt'.
     """
-    global logger  # Ensure logger is accessible
+    global logger
     item_id = item_data_ground_truth.get(
         "id"
-    )  # 'foldername' in dataset acts as item_id
+    )
     if not item_id:
         logger.warning("No 'id' specified in ground truth item. Skipping.")
         return None
@@ -286,7 +285,7 @@ def judge_model_results_main(
 
         try:
             response = requests.post(
-                judge_api_url, headers=judge_headers, json=payload, timeout=60
+                judge_api_url, headers=judge_headers, json=payload, timeout=240
             )
             response.raise_for_status()
 
@@ -301,7 +300,11 @@ def judge_model_results_main(
 
             # Parse the JSON response
             try:
-                parsed_response = json.loads(response_text)
+                if response_text.startswith("```json"):
+                    response_text = response_text[7:]
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+                parsed_response = json.loads(response_text.strip())
 
                 # Map the responses back to the original items
                 for idx, item_id in enumerate(item_id_mapping, 1):
