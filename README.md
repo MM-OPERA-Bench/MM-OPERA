@@ -133,7 +133,7 @@ To assess open-ended responses, MM-OPERA uses two LLM-as-a-Judge strategies:
 
    * Converts responses into multi-hop paths and scores each step by:
      * **Reasonableness ($R_t$)**, **Distinctiveness ($D_t$)**, **Knowledgeability ($K_t$)**.
-   * Step score: $s_t = \alpha R_tD_t + (1-\alpha) K_t$; Path score: $S_r = \sum_t s_t \delta^t$.
+   * Step score: \$s_t = \alpha R_tD_t + (1-\alpha) K_t\$; Path score: \$S_r = \sum_t s_t \delta^t\$.
    * Captures the quality and efficiency of the chain of thought.
 
 ## 📝 Contributing
