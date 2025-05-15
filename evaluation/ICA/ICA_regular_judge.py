@@ -106,19 +106,17 @@ def generate_individual_prompts(
     """
     global logger  # Ensure logger is accessible
     prompts_for_item = []
-    item_id = item_data_ground_truth.get(
-        "foldername"
-    )  # 'foldername' in dataset acts as item_id
+    item_id = item_data_ground_truth.get("id")
     if not item_id:
         tqdm.write(
-            f"Warning: No 'foldername' (item_id) specified in ground truth item. Skipping."
-        )  # Use tqdm.write for log in loop
+            f"Warning: No 'id' (item_id) specified in ground truth item. Skipping."
+        )
         return prompts_for_item
 
     if not isinstance(mllm_item_results, list):
         tqdm.write(
             f"Error: MLLM results for item {item_id} is not a list: {mllm_item_results}. Skipping prompt generation for this item."
-        )  # Use tqdm.write for log in loop
+        )
         return prompts_for_item
 
     # Check for errors in MLLM results
@@ -148,14 +146,13 @@ def generate_individual_prompts(
         # The reasoning field could be a string containing JSON data or already a Python object
         reasoning_data = item_data_ground_truth.get("reasoning", [])
 
-        # 如果reasoning是字符串，尝试解析为JSON
         if isinstance(reasoning_data, str):
             try:
                 reasoning_data = json.loads(reasoning_data)
             except json.JSONDecodeError:
                 tqdm.write(
                     f"Warning: Failed to parse reasoning JSON for item {item_id}. Using empty values."
-                )  # Use tqdm.write for log in loop
+                )
                 reasoning_data = []
 
         if isinstance(reasoning_data, list) and len(reasoning_data) >= 2:
@@ -183,7 +180,7 @@ def generate_individual_prompts(
             # Fallback if reasoning data is not properly structured
             tqdm.write(
                 f"Warning: Reasoning data for item {item_id} is not properly structured. Using empty values."
-            )  # Use tqdm.write for log in loop
+            )
             exp1_gt = ""
             exp2_gt = ""
             path1_gt = ""
@@ -192,27 +189,25 @@ def generate_individual_prompts(
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
         tqdm.write(
             f"Error: Error extracting ground truth details for item {item_id}: {e}. Check dataset structure. Skipping."
-        )  # Use tqdm.write for log in loop
+        )
         return prompts_for_item
 
     num_expected_mllm_results = 4 if config_rotate_test else 1
     if len(mllm_item_results) < num_expected_mllm_results:
         tqdm.write(
             f"Warning: Item {item_id} has insufficient MLLM results ({len(mllm_item_results)} found, {num_expected_mllm_results} expected based on rotate_test={config_rotate_test}). Some sub-tests may not be judgeable."
-        )  # Use tqdm.write for log in loop
+        )
 
     for judge_id in judge_id_list_to_process:
         if judge_id >= len(mllm_item_results):
             tqdm.write(
                 f"Warning: Attempting to access MLLM result for judge_id {judge_id} but only {len(mllm_item_results)} results exist for item {item_id}. Skipping this sub-test."
-            )  # Use tqdm.write for log in loop
+            )
             continue
 
         mllm_output_text = mllm_item_results[judge_id]
 
         try:
-            # 根据judge_id选择正确的图像描述
-            # 在rotate_test模式下，每个子测试使用不同的图像作为第4张图像
             standard_answer_image_4_desc = (
                 img_desc_list[3 - judge_id]
                 if 0 <= 3 - judge_id < len(img_desc_list)
@@ -225,7 +220,7 @@ def generate_individual_prompts(
         except IndexError as e:
             tqdm.write(
                 f"Error: Error constructing standard answer for item {item_id}, judge_id {judge_id} due to IndexError: {e}. This might indicate an issue with img_desc_list (expected 4 descriptions) or reasoning structure in dataset. Skipping sub-test."
-            )  # Use tqdm.write for log in loop
+            )
             continue
 
         user_prompt_text = (
@@ -243,47 +238,70 @@ def generate_individual_prompts(
     return prompts_for_item
 
 
-def judge_model_results_main(ground_truth_data, mllm_results_data, config):
+def judge_model_results_main(
+    ground_truth_data,
+    mllm_results_data,
+    config,
+    judge_model_name_arg,
+    judge_scores_output_file,
+):
     """
     Main function to orchestrate the judging process.
     Loads existing results, prepares batches, calls API, and saves results.
     """
     global logger
 
-    ica_judge_config = config["evaluation_settings"]["ica_judge"]
+    # Load existing judge results if the file exists
+    if judge_scores_output_file.exists():
+        judge_results = load_json(judge_scores_output_file) or {}
+        logger.info(
+            f"Loaded {len(judge_results)} existing judge results from {judge_scores_output_file}"
+        )
+    else:
+        judge_results = {}
+        logger.info(
+            f"No existing judge results found at {judge_scores_output_file}. Starting fresh."
+        )
+
+    ica_judge_config = config["evaluation_settings"]["ica"]["regular_judge"]
     ica_run_config = config["evaluation_settings"]["ica"]
     general_config = config["general_settings"]
 
-    judge_model_name = ica_judge_config["judge_model_name"]
-    judge_model_provider_name = ica_judge_config["judge_model_provider"]
-
+    if not judge_model_name_arg:
+        judge_model_name_arg = ica_judge_config.get("default_judge_model_name")
+        if not judge_model_name_arg:
+            raise ValueError(
+                "Judge model name not provided via argument and not found in config's default_judge_model_name."
+            )
+    judge_model_name = judge_model_name_arg
     judge_model_specific_config = config["models"].get(judge_model_name)
     if not judge_model_specific_config:
         logger.error(
             f"Judge model '{judge_model_name}' not found in model_config.yaml models section."
         )
-        return {}
+        return judge_results
 
+    judge_model_provider_name = judge_model_specific_config.get("provider")
     judge_api_provider_config = config["api_providers"].get(judge_model_provider_name)
     if not judge_api_provider_config:
         logger.error(
             f"API provider '{judge_model_provider_name}' for judge model '{judge_model_name}' not found."
         )
-        return {}
+        return judge_results
 
     judge_base_url = judge_api_provider_config["base_url"]
-    judge_endpoint = judge_model_specific_config.get(
-        "endpoint",
-        judge_api_provider_config.get("default_endpoint", "/chat/completions"),
-    )
+    judge_endpoint = judge_model_specific_config.get("endpoint", "/chat/completions")
     judge_api_url = f"{judge_base_url.rstrip('/')}/{judge_endpoint.lstrip('/')}"
 
+    judge_model_identifier = judge_model_specific_config.get(
+        "model_identifier", judge_model_name
+    )
     judge_api_key = get_api_key(judge_model_name)
     if not judge_api_key:
         logger.error(
             f"API key for judge model '{judge_model_name}' could not be retrieved."
         )
-        return {}
+        return judge_results
 
     judge_headers = {
         "Authorization": f"Bearer {judge_api_key}",
@@ -298,99 +316,81 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
     )
 
     config_rotate_test = ica_run_config.get("rotate_test", True)
-    sleep_time = general_config.get(
-        "sleep_time_between_judge_requests",
-        general_config.get("sleep_time_between_requests", 7),
+    sleep_time = ica_judge_config.get(
+        "sleep_time_after_judge_api",
+        general_config.get("sleep_time_between_judge_requests", 7),
     )
-
-    judge_results_file_path_str = general_config["current_judge_file_path"]
-    judge_results_file_path = Path(
-        judge_results_file_path_str
-    )  # Ensure Path object is created
-
-    existing_judge_scores = load_json(judge_results_file_path) or {}  # Use Path object
-    if existing_judge_scores:
-        logger.info(
-            f"Loaded {len(existing_judge_scores)} existing judge scores from {judge_results_file_path}"
-        )  # Use Path object in log
-    else:
-        logger.info(
-            f"No existing judge file found at {judge_results_file_path} or file is empty. Starting fresh."
-        )  # Use Path object in log
 
     all_prompts_to_judge_in_batches = []
 
     # Add tqdm to the loop iterating through ground truth data
     for gt_item in tqdm(ground_truth_data, desc="Processing items for judging"):
-        item_id = gt_item.get("foldername")
+        item_id = gt_item.get("id")
         if not item_id:
-            tqdm.write(
-                "Warning: Ground truth item missing 'foldername'. Skipping."
-            )  # Use tqdm.write for log in loop
+            tqdm.write("Warning: Ground truth item missing 'id'. Skipping.")
             continue
 
         num_expected_tests = 4 if config_rotate_test else 1
 
         if item_id not in mllm_results_data:
-            tqdm.write(
-                f"Warning: No MLLM results found for item_id: {item_id}. Marking all sub-tests as N/A for judging."
-            )  # Use tqdm.write for log in loop
-            existing_judge_scores[item_id] = [
-                {
-                    "score_4o": "N/A",
-                    "score_reason": f"Skipped judging: MLLM results missing for item {item_id}.",
-                }
-            ] * num_expected_tests
-            save_json(
-                existing_judge_scores, judge_results_file_path
-            )  # Save this N/A status # Use Path object
+            # tqdm.write(
+            #     f"Warning: No MLLM results found for item_id: {item_id}. Marking all sub-tests as N/A for judging."
+            # )
+            # judge_results[item_id] = [
+            #     {
+            #         "score_judge": "N/A",
+            #         "score_reason": f"Skipped judging: MLLM results missing for item {item_id}.",
+            #     }
+            # ] * num_expected_tests
+            # save_json(
+            #     judge_results, judge_scores_output_file
+            # )
             continue
 
         mllm_responses_for_item = mllm_results_data[item_id]
         if not isinstance(mllm_responses_for_item, list):
             tqdm.write(
                 f"Error: MLLM results for item {item_id} is not a list: {mllm_responses_for_item}. Marking as error for judging."
-            )  # Use tqdm.write for log in loop
-            existing_judge_scores[item_id] = [
-                {
-                    "score_4o": "N/A",
-                    "score_reason": f"Skipped judging: MLLM results for item {item_id} are malformed.",
-                }
-            ] * num_expected_tests
-            save_json(
-                existing_judge_scores, judge_results_file_path
-            )  # Save this N/A status # Use Path object
+            )
+            # judge_results[item_id] = [
+            #     {
+            #         "score_judge": "N/A",
+            #         "score_reason": f"Skipped judging: MLLM results for item {item_id} are malformed.",
+            #     }
+            # ] * num_expected_tests
+            # save_json(
+            #     judge_results, judge_scores_output_file
+            # )
             continue
 
         if (
-            item_id not in existing_judge_scores
-            or not isinstance(existing_judge_scores.get(item_id), list)
-            or len(existing_judge_scores.get(item_id)) != num_expected_tests
+            item_id not in judge_results
+            or not isinstance(judge_results.get(item_id), list)
+            or len(judge_results.get(item_id)) != num_expected_tests
         ):
             tqdm.write(
                 f"Debug: Initializing/Resetting judge scores structure for item {item_id} to {num_expected_tests} slots."
-            )  # Use tqdm.write for log in loop
-            existing_judge_scores[item_id] = [None] * num_expected_tests
+            )
+            judge_results[item_id] = [None] * num_expected_tests
 
-        current_item_judge_outputs = existing_judge_scores[item_id]
+        current_item_judge_outputs = judge_results[item_id]
         judge_ids_to_process_for_this_item = []
 
         for i in range(num_expected_tests):
             if i >= len(mllm_responses_for_item):
                 tqdm.write(
                     f"Warning: MLLM output for item {item_id}, sub-test {i} is missing. Expected {num_expected_tests} results, got {len(mllm_responses_for_item)}."
-                )  # Use tqdm.write for log in loop
-                if i < len(
-                    current_item_judge_outputs
-                ):  # Ensure we don't go out of bounds
+                )
+                if i < len(current_item_judge_outputs):
+                    pass
                     current_item_judge_outputs[i] = {
-                        "score_4o": "N/A",
+                        "score_judge": "N/A",
                         "score_reason": f"Skipped judging: MLLM output missing for sub-test {i}.",
                     }
                 continue
 
             mllm_sub_test_output = mllm_responses_for_item[i]
-            # 更全面的错误检测，与 ICA_run.py 保持一致
+
             is_error = False
             error_reason = ""
 
@@ -414,7 +414,7 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
                 )
                 if i < len(current_item_judge_outputs):
                     current_item_judge_outputs[i] = {
-                        "score_4o": "N/A",
+                        "score_judge": "N/A",
                         "score_reason": f"Skipped judging: {error_reason}",
                     }
                 continue
@@ -428,7 +428,7 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
             needs_judging_flag = True
             if (
                 isinstance(judge_sub_test_output, dict)
-                and judge_sub_test_output.get("score_4o")
+                and judge_sub_test_output.get("score_judge")
                 not in [None, "", "Error", "N/A"]
                 and "Skipped judging"
                 not in judge_sub_test_output.get("score_reason", "")
@@ -456,9 +456,9 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
         if not judge_ids_to_process_for_this_item:
             tqdm.write(
                 f"Info: All sub-tests for item {item_id} are either already judged satisfactorily or have MLLM outputs unsuitable for judging. Saving current state."
-            )  # Use tqdm.write for log in loop
+            )
             save_json(
-                existing_judge_scores, judge_results_file_path
+                judge_results, judge_scores_output_file
             )  # Save N/A updates for this item # Use Path object
             continue
 
@@ -473,9 +473,9 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
     total_prompts_count = len(all_prompts_to_judge_in_batches)
     if total_prompts_count == 0:
         logger.info("No new prompts to judge in this run after filtering all items.")
-        # existing_judge_scores might have been updated with N/A for some items, so save it.
-        save_json(existing_judge_scores, judge_results_file_path)  # Use Path object
-        return existing_judge_scores
+        # judge_results might have been updated with N/A for some items, so save it.
+        save_json(judge_results, judge_scores_output_file)  # Use Path object
+        return judge_results
 
     num_batches_to_run = (
         total_prompts_count + judge_group_size - 1
@@ -498,19 +498,17 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
             current_batch_prompts_info
         )
         # Use model_identifier from judge_model_specific_config if available
-        actual_judge_model_id_for_api = judge_model_specific_config.get(
-            "model_identifier", judge_model_name
-        )
+
         api_payload = generate_payload_batch(
             combined_user_prompt,
-            actual_judge_model_id_for_api,
+            judge_model_identifier,
             judge_prompt_template,
             max_tokens_for_batch_judge,
         )
 
-        tqdm.write(
-            f"Info: Sending batch {batch_idx + 1}/{num_batches_to_run} to judge API ({judge_api_url}) using model {actual_judge_model_id_for_api}. Batch size: {len(current_batch_prompts_info)}"
-        )  # Use tqdm.write for log in loop
+        # tqdm.write(
+        #     f"Info: Sending batch {batch_idx + 1}/{num_batches_to_run} to judge API ({judge_api_url}) using model {judge_model_identifier}. Batch size: {len(current_batch_prompts_info)}"
+        # )
         # logger.debug(f"Payload for batch {batch_idx + 1}: {json.dumps(api_payload, indent=2, ensure_ascii=False)}") # Can be very verbose
 
         try:
@@ -530,7 +528,7 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
             if not judge_response_text:  # Handle if content is empty or missing
                 tqdm.write(
                     f"Error: No content in judge response for batch {batch_idx + 1}. Full response: {response_content_json}"
-                )  # Use tqdm.write for log in loop
+                )
                 judge_response_text = (
                     '{"error": "No content from API"}'  # Make it a parsable JSON error
                 )
@@ -563,13 +561,13 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
             except json.JSONDecodeError as jde:
                 tqdm.write(
                     f"Error: JSON decoding error for batch {batch_idx + 1}: {jde}. Raw text was: '{judge_response_text[:500]}...'"
-                )  # Use tqdm.write for log in loop
+                )
                 for item_id_map, judge_id_map in batch_mapping:
-                    if item_id_map in existing_judge_scores and judge_id_map < len(
-                        existing_judge_scores[item_id_map]
+                    if item_id_map in judge_results and judge_id_map < len(
+                        judge_results[item_id_map]
                     ):
-                        existing_judge_scores[item_id_map][judge_id_map] = {
-                            "score_4o": "Error",
+                        judge_results[item_id_map][judge_id_map] = {
+                            "score_judge": "Error",
                             "score_reason": f"Judge response decode failed: {jde}",
                         }
                 continue
@@ -577,19 +575,19 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
             for i_map_idx, (item_id_map, judge_id_map) in enumerate(batch_mapping, 1):
                 response_key = str(i_map_idx)
                 if (
-                    item_id_map not in existing_judge_scores
-                    or not isinstance(existing_judge_scores[item_id_map], list)
-                    or judge_id_map >= len(existing_judge_scores[item_id_map])
+                    item_id_map not in judge_results
+                    or not isinstance(judge_results[item_id_map], list)
+                    or judge_id_map >= len(judge_results[item_id_map])
                 ):
                     tqdm.write(
-                        f"Error: Internal error: existing_judge_scores structure incorrect for item {item_id_map}, judge_id {judge_id_map} before assignment."
-                    )  # Use tqdm.write for log in loop
+                        f"Error: Internal error: judge_results structure incorrect for item {item_id_map}, judge_id {judge_id_map} before assignment."
+                    )
                     continue  # Should not happen if initialization is correct
 
                 if response_key in parsed_judge_responses:
                     # Ensure the value for the key is a dictionary, otherwise log a warning and assign an error
                     if isinstance(parsed_judge_responses[response_key], dict):
-                        existing_judge_scores[item_id_map][judge_id_map] = (
+                        judge_results[item_id_map][judge_id_map] = (
                             parsed_judge_responses[response_key]
                         )
                         log_judge_response_detail(
@@ -601,60 +599,58 @@ def judge_model_results_main(ground_truth_data, mllm_results_data, config):
                         tqdm.write(
                             f"Warning: Response for key '{response_key}' (item {item_id_map}, judge_id {judge_id_map}) in batch {batch_idx + 1} is not a dictionary. Value: {parsed_judge_responses[response_key]}. Marking as error."
                         )
-                        existing_judge_scores[item_id_map][judge_id_map] = {
-                            "score_4o": "Error",
+                        judge_results[item_id_map][judge_id_map] = {
+                            "score_judge": "Error",
                             "score_reason": f"Judge response value for key {response_key} is not a dictionary",
                         }
                 else:
                     tqdm.write(
                         f"Warning: Missing score for key '{response_key}' (item {item_id_map}, judge_id {judge_id_map}) in batch {batch_idx + 1} response. Marking as error."
-                    )  # Use tqdm.write for log in loop
-                    existing_judge_scores[item_id_map][judge_id_map] = {
-                        "score_4o": "Error",
+                    )
+                    judge_results[item_id_map][judge_id_map] = {
+                        "score_judge": "Error",
                         "score_reason": "Judge response missing key for this item in batch",
                     }
 
         except requests.exceptions.RequestException as req_e:
-            tqdm.write(
-                f"Error: API request failed for batch {batch_idx + 1}: {req_e}"
-            )  # Use tqdm.write for log in loop
+            tqdm.write(f"Error: API request failed for batch {batch_idx + 1}: {req_e}")
             for item_id_map, judge_id_map in batch_mapping:
-                if item_id_map in existing_judge_scores and judge_id_map < len(
-                    existing_judge_scores[item_id_map]
+                if item_id_map in judge_results and judge_id_map < len(
+                    judge_results[item_id_map]
                 ):
-                    existing_judge_scores[item_id_map][judge_id_map] = {
-                        "score_4o": "Error",
+                    judge_results[item_id_map][judge_id_map] = {
+                        "score_judge": "Error",
                         "score_reason": f"API Request Failed: {str(req_e)}",
                     }
         except Exception as e:
             tqdm.write(
                 f"Error: An unexpected error occurred processing batch {batch_idx + 1}: {e}"
-            )  # Use tqdm.write for log in loop
+            )
             # tqdm.write(f"Traceback: {traceback.format_exc()}") # Optional: Add traceback for debugging unexpected errors
             for item_id_map, judge_id_map in batch_mapping:
-                if item_id_map in existing_judge_scores and judge_id_map < len(
-                    existing_judge_scores[item_id_map]
+                if item_id_map in judge_results and judge_id_map < len(
+                    judge_results[item_id_map]
                 ):
-                    existing_judge_scores[item_id_map][judge_id_map] = {
-                        "score_4o": "Error",
+                    judge_results[item_id_map][judge_id_map] = {
+                        "score_judge": "Error",
                         "score_reason": f"Unexpected error during batch: {str(e)}",
                     }
 
         finally:
-            save_json(existing_judge_scores, judge_results_file_path)
-            tqdm.write(
-                f"Info: Judge scores saved after processing batch {batch_idx + 1} to {judge_results_file_path}"
-            )  # Use tqdm.write for log in loop
+            save_json(judge_results, judge_scores_output_file)
+            # tqdm.write(
+            #     f"Info: Judge scores saved after processing batch {batch_idx + 1} to {judge_scores_output_file}"
+            # )
             if batch_idx < num_batches_to_run - 1:
-                tqdm.write(
-                    f"Info: Sleeping for {sleep_time} seconds before next batch..."
-                )  # Use tqdm.write for log in loop
+                # tqdm.write(
+                #     f"Info: Sleeping for {sleep_time} seconds before next batch..."
+                # )
                 time.sleep(sleep_time)
 
     logger.info(
         "Finished processing all judge batches."
     )  # Use logger directly outside the tqdm loop
-    return existing_judge_scores
+    return judge_results
 
 
 def combine_results_and_judgements(mllm_results_data, final_judge_scores):
@@ -664,14 +660,14 @@ def combine_results_and_judgements(mllm_results_data, final_judge_scores):
     """
     global logger
     combined_output = {}
-    # Add tqdm to the loop iterating through items for combining
+
     for item_id, mllm_responses_list in tqdm(
         mllm_results_data.items(), desc="Combining results"
     ):
         if not isinstance(mllm_responses_list, list):
             tqdm.write(
                 f"Warning: MLLM data for item {item_id} is not a list: {mllm_responses_list}. Skipping combination for this item."
-            )  # Use tqdm.write for log in loop
+            )
             combined_output[item_id] = {
                 "MLLM_answer_malformed": mllm_responses_list,
                 "judge_answer": "NOT_PROCESSED_DUE_TO_MLLM_MALFORMED_DATA",
@@ -683,7 +679,7 @@ def combine_results_and_judgements(mllm_results_data, final_judge_scores):
         ):
             tqdm.write(
                 f"Warning: Judge scores not found or malformed for item_id: {item_id} during combination. MLLM responses: {len(mllm_responses_list)}"
-            )  # Use tqdm.write for log in loop
+            )
             combined_output[item_id] = [
                 {
                     "MLLM_answer": mllm_ans,
@@ -705,7 +701,7 @@ def combine_results_and_judgements(mllm_results_data, final_judge_scores):
         if num_mllm_tests != num_judge_scores:
             tqdm.write(
                 f"Warning: Mismatch in number of MLLM responses ({num_mllm_tests}) and judge scores ({num_judge_scores}) for item {item_id}."
-            )  # Use tqdm.write for log in loop
+            )
 
         for i in range(max_len):
             mllm_single_answer = (
@@ -717,7 +713,7 @@ def combine_results_and_judgements(mllm_results_data, final_judge_scores):
                 judge_scores_list[i]
                 if i < num_judge_scores
                 else {
-                    "score_4o": "N/A",
+                    "score_judge": "N/A",
                     "score_reason": "Error: Judge Score Missing for this sub-test index",
                 }
             )
@@ -739,7 +735,7 @@ def log_judge_response_detail(response_data_dict, item_id_str, judge_id_val):
     score = "N/A"
     reason = "N/A"
     if isinstance(response_data_dict, dict):
-        score = response_data_dict.get("score_4o", "N/A")
+        score = response_data_dict.get("score_judge", "N/A")
         reason = response_data_dict.get("score_reason", "N/A")
     elif isinstance(response_data_dict, str):  # Handle if it's an error string
         reason = response_data_dict
@@ -752,7 +748,7 @@ def log_judge_response_detail(response_data_dict, item_id_str, judge_id_val):
         f"  Reason: {reason}\n"
         f"------------------------------------"
     )
-    logger.info(log_message)  # Use logger directly to ensure it goes to the file
+    # logger.info(log_message)  # Use logger directly to ensure it goes to the file
 
 
 # =======================
@@ -767,15 +763,25 @@ def main():
     parser.add_argument(
         "--test_model_name",
         type=str,
-        required=True,
-        help="Name of the MLLM whose results are to be judged (must match how its results file is named, e.g., 'gpt-4o').",
+        # required=True,
+        help="Name of the MLLM whose results are to be judged (must match how its results file is named, e.g., 'Gemini-2.0-Flash-Thinking-Exp').",
+    )
+    parser.add_argument(
+        "--judge_model_name",
+        type=str,
+        default=None,
+        help="Name of the LLM to use as the judge (e.g., GPT-4o-judge). Must be defined in model_config.yaml.",
     )
     args = parser.parse_args()
-    test_model_to_judge = args.test_model_name
-
     temp_logger_for_config_errors = None
+
     try:
         config = get_config()
+        test_model_to_judge = args.test_model_name
+        if not test_model_to_judge:
+            test_model_to_judge = config["evaluation_settings"]["ica"][
+                "default_model_name"
+            ]
 
         results_base_dir = PROJECT_ROOT / config["general_settings"]["results_base_dir"]
         logs_base_dir = PROJECT_ROOT / config["general_settings"]["logs_base_dir"]
@@ -783,24 +789,26 @@ def main():
         results_base_dir.mkdir(parents=True, exist_ok=True)
         logs_base_dir.mkdir(parents=True, exist_ok=True)
 
-        mllm_results_file = results_base_dir / f"ICA_{test_model_to_judge}_results.json"
+        mllm_results_file = results_base_dir / f"{test_model_to_judge}_ICA_results.json"
 
-        judge_log_file = logs_base_dir / f"ICA_judge_{test_model_to_judge}.log"
+        judge_log_file = logs_base_dir / f"{test_model_to_judge}_ICA_regular_judge.log"
         judge_scores_output_file = (
-            results_base_dir / f"ICA_judge_{test_model_to_judge}_scores.json"
+            results_base_dir / f"{test_model_to_judge}_ICA_regular_scoring.json"
         )
-        combined_output_file = (
-            results_base_dir / f"ICA_combined_{test_model_to_judge}_results.json"
-        )
+        # combined_output_file = (
+        #     results_base_dir / f"{test_model_to_judge}_ICA_regular_combined_results.json"
+        # )
 
-        logger = setup_logger(f"ICA_judge_{test_model_to_judge}", judge_log_file)
+        logger = setup_logger(
+            f"{test_model_to_judge}_ICA_regular_judge", judge_log_file
+        )
         temp_logger_for_config_errors = logger
 
         logger.info(f"--- Starting ICA Judging for MLLM: {test_model_to_judge} ---")
         logger.info(f"Using Project Root: {PROJECT_ROOT}")
         logger.info(f"Reading MLLM results from: {mllm_results_file}")
         logger.info(f"Saving judge scores to: {judge_scores_output_file}")
-        logger.info(f"Saving combined results to: {combined_output_file}")
+        # logger.info(f"Saving combined results to: {combined_output_file}")
         logger.info(f"Logging to: {judge_log_file}")
 
         config["general_settings"]["current_judge_file_path"] = str(
@@ -876,7 +884,11 @@ def main():
             return
 
         final_judge_scores_data = judge_model_results_main(
-            ground_truth_data_loaded, mllm_results_data_loaded, config
+            ground_truth_data_loaded,
+            mllm_results_data_loaded,
+            config,
+            args.judge_model_name,
+            judge_scores_output_file,
         )
 
         save_json(final_judge_scores_data, judge_scores_output_file)
@@ -884,14 +896,14 @@ def main():
             f"All judge scores finalized and saved to {judge_scores_output_file}"
         )
 
-        combined_data_final = combine_results_and_judgements(
-            mllm_results_data_loaded, final_judge_scores_data
-        )
+        # combined_data_final = combine_results_and_judgements(
+        #     mllm_results_data_loaded, final_judge_scores_data
+        # )
 
-        save_json(combined_data_final, combined_output_file)
-        logger.info(
-            f"Combined MLLM results and judge scores saved to {combined_output_file}"
-        )
+        # save_json(combined_data_final, combined_output_file)
+        # logger.info(
+        #     f"Combined MLLM results and judge scores saved to {combined_output_file}"
+        # )
 
         logger.info(f"--- ICA Judging finished for MLLM: {test_model_to_judge} ---")
 

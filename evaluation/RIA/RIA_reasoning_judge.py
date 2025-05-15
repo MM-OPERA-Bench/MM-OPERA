@@ -1,5 +1,6 @@
 # MM-OPERA/evaluation/RIA/RIA_reasoning_judge.py
 
+import os
 import argparse
 import time
 import requests
@@ -104,7 +105,10 @@ def perform_reasoning_judgment(
         )
         return
 
-    judge_api_url = provider_config["base_url"] + judge_model_config["endpoint"]
+    judge_base_url = provider_config["base_url"]
+    judge_endpoint = judge_model_config.get("endpoint", "/chat/completions")
+    judge_api_url = f"{judge_base_url.rstrip('/')}/{judge_endpoint.lstrip('/')}"
+
     headers = {
         "Authorization": f"Bearer {judge_api_key}",
         "Content-Type": "application/json",
@@ -124,8 +128,9 @@ def perform_reasoning_judgment(
         ria_judge_settings["judge_max_tokens_per_batch_multiplier"] * group_size
     )
     sleep_time = ria_judge_settings.get(
-        "sleep_time_after_judge_api"
-    ) or general_config.get("sleep_time_between_judge_requests", 7)
+        "sleep_time_after_judge_api",
+        general_config.get("sleep_time_between_judge_requests", 7),
+    )
 
     # Load existing results
     existing_judgements = load_json(output_file_path) or {}
@@ -191,9 +196,9 @@ def perform_reasoning_judgment(
                     all_in_batch_processed = False
                     break
             if all_in_batch_processed:
-                logger.info(
-                    f"Skipping batch starting with '{batch[0]['id']}' as all items seem processed."
-                )
+                # logger.info(
+                #     f"Skipping batch starting with '{batch[0]['id']}' as all items seem processed."
+                # )
                 pbar.update(len(batch))
                 continue
 
@@ -226,13 +231,10 @@ def perform_reasoning_judgment(
                 # logger.debug(f"Payload content (first 200 chars of user prompt): {full_user_prompt[:200]}")
 
                 api_response = requests.post(
-                    judge_api_url, headers=headers, json=payload, timeout=180
-                )  # Increased timeout
-                api_response.raise_for_status()  # Will raise HTTPError for bad responses (4xx or 5xx)
-
+                    judge_api_url, headers=headers, json=payload, timeout=240
+                )
+                api_response.raise_for_status()
                 response_json = api_response.json()
-
-                # For OpenAI-like APIs:
                 judge_response_content = (
                     response_json.get("choices", [{}])[0]
                     .get("message", {})
@@ -344,8 +346,10 @@ def perform_reasoning_judgment(
                     # logger.info(f"Sleeping for {sleep_time} seconds...")
                     time.sleep(sleep_time)
 
-    logger.info(f"Reasoning judgement finished for model: {model_to_judge_name}.")
     logger.info(f"Final reasoning scores saved to {output_file_path}")
+    logger.info(
+        f"--- Reasoning judgement finished for model: {model_to_judge_name} ---"
+    )
 
 
 def main():
@@ -367,12 +371,15 @@ def main():
         help="Name of the LLM to use as the judge (e.g., GPT-4o-judge). Must be defined in model_config.yaml.",
     )
     args = parser.parse_args()
-    test_model_to_judge = args.test_model_name
 
     try:
         # --- 1. Load Configuration ---
         config = get_config()
-
+        test_model_to_judge = args.test_model_name
+        if not test_model_to_judge:
+            test_model_to_judge = config["evaluation_settings"]["ria"][
+                "default_model_name"
+            ]
         judge_model_name_arg = args.judge_model_name
         if not judge_model_name_arg:
             judge_model_name_arg = config["evaluation_settings"]["ria"][
@@ -435,6 +442,7 @@ def main():
         hf_dataset_name = config["general_settings"]["huggingface_dataset_name"]
 
         hf_config.HF_DATASETS_CACHE = hf_cache_dir_str
+        os.environ["HF_DATASETS_CACHE"] = hf_cache_dir_str
         Path(hf_cache_dir_str).mkdir(parents=True, exist_ok=True)
         logger.info(
             f"Hugging Face cache directory set to: {hf_config.HF_DATASETS_CACHE}"

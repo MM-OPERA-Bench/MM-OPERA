@@ -1,11 +1,11 @@
 # MM-OPERA/evaluation/ICA/ICA_run.py
 
+import os
 import time
 import requests
 import argparse
 from pathlib import Path
 import yaml
-import json
 from tqdm import tqdm
 
 # Relative imports for modules within the 'evaluation' package
@@ -44,6 +44,9 @@ def analyze_image_relationships_hf(
     results_file_path,
 ):
     global logger  # Use the global logger initialized in main
+    if logger is None:  # Should be set by main
+        print("Error: Logger not initialized in analyze_image_relationships_hf.")
+        return {}
 
     logger.info(
         f"Starting ICA analysis with Hugging Face dataset for model: {model_name}"
@@ -53,47 +56,52 @@ def analyze_image_relationships_hf(
     try:
         ica_config = config["evaluation_settings"]["ica"]
         prompt_template = ica_config["prompt"]
-        default_max_tokens = ica_config.get(
-            "default_max_tokens", 3000
-        )  # Use .get for safety
+        default_max_tokens = ica_config.get("default_max_tokens", 4096)
         num_images_to_process_from_config = ica_config["num_images_to_process"]
-        rotate_test = ica_config.get(
-            "rotate_test", True
-        )  # Default to True if not specified
+        rotate_test = ica_config.get("rotate_test", True)
 
-        model_specific_config = config["models"].get(model_name)
-        if not model_specific_config:
+        model_config = config["models"].get(model_name)
+        if not model_config:
             logger.error(f"Model '{model_name}' not found in model_config.yaml.")
             return
 
-        api_provider_name = model_specific_config["provider"]
-        api_provider_config = config["api_providers"].get(api_provider_name)
-        if not api_provider_config:
+        model_identifier = model_config.get("model_identifier", model_name)
+        provider_name = model_config["provider"]
+        provider_config = config["api_providers"].get(provider_name)
+        if not provider_config:
             logger.error(
-                f"API provider '{api_provider_name}' for model '{model_name}' not found in model_config.yaml."
+                f"API provider '{provider_name}' for model '{model_name}' not found in model_config.yaml."
             )
             return
 
-        base_url = api_provider_config["base_url"]
-        endpoint = model_specific_config["endpoint"]
-        api_url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
-
-        api_key = get_api_key(
-            model_name
-        )  # Pass model_name instead of api_provider_name and config
+        try:
+            api_key = get_api_key(model_name)
+        except NameError:  # Fallback if get_api_key is not defined in this scope
+            logger.error(
+                "'get_api_key' function not found. API key cannot be retrieved."
+            )
+            api_key = None  # Or fetch from config if available there
         if not api_key:
             logger.error(
-                f"API key for model '{model_name}' (provider '{api_provider_name}') could not be retrieved."
+                f"API key for model '{model_name}' could not be retrieved. Skipping."
             )
-            return
+            return {}
+
+        api_url = f"{provider_config.get('base_url', '').rstrip('/')}/{model_config.get('endpoint', '').lstrip('/')}"
+        if not api_url:
+            logger.error(
+                f"Could not construct API URL for model '{model_name}'. Missing base_url or endpoint."
+            )
+            return {}
 
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
 
-        sleep_time = config.get("general_settings", {}).get(
-            "sleep_time_between_requests", 1
+        sleep_time = ica_config.get(
+            "sleep_time_after_judge_api",
+            config.get("general_settings", {}).get("sleep_time_between_requests", 1),
         )
 
     except KeyError as e:
@@ -158,9 +166,9 @@ def analyze_image_relationships_hf(
                             )
                             break
                     if all_sub_tests_valid:
-                        logger.info(
-                            f"Item {item_id_str} (index {idx+1}/{total_items}) already processed with valid results. Skipping."
-                        )
+                        # logger.info(
+                        #     f"Item {item_id_str} (index {idx+1}/{total_items}) already processed with valid results. Skipping."
+                        # )
                         main_pbar.update(1)  # 更新主进度条
                         continue
                 elif (
@@ -172,9 +180,9 @@ def analyze_image_relationships_hf(
                     pass  # Continue to processing
                 # else: continue if item_id_str in processed_item_ids and not in all_results (should not happen with good progress saving)
 
-            logger.info(
-                f"Processing item {item_id_str} (index {idx+1}/{total_items})..."
-            )
+            # logger.info(
+            #     f"Processing item {item_id_str} (index {idx+1}/{total_items})..."
+            # )
 
             pil_images_from_dataset = []
             for i in range(1, 5):
@@ -274,24 +282,26 @@ def analyze_image_relationships_hf(
                 )
 
                 if is_processed_satisfactorily:
-                    logger.info(
-                        f"Sub-test {test_idx+1}/{num_tests} for item {item_id_str} already has a valid result. Skipping."
-                    )
+                    # logger.info(
+                    #     f"Sub-test {test_idx+1}/{num_tests} for item {item_id_str} already has a valid result. Skipping."
+                    # )
                     continue
                 else:
                     if (
                         isinstance(current_response, str)
                         and "Error" in current_response
                     ):
-                        logger.info(
-                            f"Sub-test {test_idx+1}/{num_tests} for item {item_id_str} had an error: '{current_response[:100]}...'. Re-processing."
-                        )
+                        pass
+                        # logger.info(
+                        #     f"Sub-test {test_idx+1}/{num_tests} for item {item_id_str} had an error: '{current_response[:100]}...'. Re-processing."
+                        # )
                     elif (
                         current_response != "Not Processed Yet"
                     ):  # Log if it was some other unsatisfactory state
-                        logger.info(
-                            f"Sub-test {test_idx+1}/{num_tests} for item {item_id_str} was not satisfactorily processed ('{str(current_response)[:50]}...'). Re-processing."
-                        )
+                        pass
+                        # logger.info(
+                        #     f"Sub-test {test_idx+1}/{num_tests} for item {item_id_str} was not satisfactorily processed ('{str(current_response)[:50]}...'). Re-processing."
+                        # )
                     # "Not Processed Yet" is the default, so no special log for that, just proceed.
 
                 item_fully_processed_without_error = (
@@ -314,37 +324,35 @@ def analyze_image_relationships_hf(
                     continue  # Move to next sub-test
 
                 payload = {
-                    "model": model_specific_config.get("model_identifier", model_name),
+                    "model": model_identifier,
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are a helpful assistant specialized in image analysis.",
+                            "content": prompt_template,
                         },
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": prompt_template},
+                                # {"type": "text", "text": prompt_template},
                                 *current_images_content,
                             ],
                         },
                     ],
-                    "max_tokens": model_specific_config.get(
-                        "max_tokens", default_max_tokens
-                    ),
+                    "max_tokens": default_max_tokens,
                 }
 
-                for param_key, param_value in model_specific_config.items():
-                    if param_key not in [
-                        "provider",
-                        "endpoint",
-                        "max_tokens",
-                        "model_identifier",
-                    ]:
-                        payload[param_key] = param_value
+                # for param_key, param_value in model_config.items():
+                #     if param_key not in [
+                #         "provider",
+                #         "endpoint",
+                #         "max_tokens",
+                #         "model_identifier",
+                #     ]:
+                #         payload[param_key] = param_value
 
-                logger.debug(
-                    f"Sending payload for item {item_id_str}, test {test_idx+1}: {json.dumps(payload, indent=2)}"
-                )
+                # logger.debug(
+                #     f"Sending payload for item {item_id_str}, test {test_idx+1}: {json.dumps(payload, indent=2)}"
+                # )
 
                 try:
                     response = requests.post(
@@ -352,9 +360,9 @@ def analyze_image_relationships_hf(
                     )
                     response.raise_for_status()
                     response_json = response.json()
-                    logger.debug(
-                        f"Received response for item {item_id_str}, test {test_idx+1}: {json.dumps(response_json, indent=2)}"
-                    )
+                    # logger.debug(
+                    #     f"Received response for item {item_id_str}, test {test_idx+1}: {json.dumps(response_json, indent=2)}"
+                    # )
 
                     if (
                         response_json.get("choices")
@@ -396,9 +404,9 @@ def analyze_image_relationships_hf(
                     all_results, results_file_path
                 )  # Save after each sub-test API call
 
-                logger.info(
-                    f"Completed API call for item {item_id_str}, test {test_idx+1}/{num_tests}. Result snippet: {str(item_responses[test_idx])[:100]}..."
-                )
+                # logger.info(
+                #     f"Completed API call for item {item_id_str}, test {test_idx+1}/{num_tests}. Result snippet: {str(item_responses[test_idx])[:100]}..."
+                # )
 
                 # Check if the newly obtained response still contains "Error"
                 if (
@@ -424,9 +432,10 @@ def analyze_image_relationships_hf(
                     break
 
             if item_fully_processed_without_error:
-                logger.info(
-                    f"Item {item_id_str} successfully processed for all sub-tests."
-                )
+                pass
+                # logger.info(
+                #     f"Item {item_id_str} successfully processed for all sub-tests."
+                # )
             else:
                 # If the item is already in the results file but still has errors, record a warning
                 if item_id_str in processed_item_ids:
@@ -440,16 +449,16 @@ def analyze_image_relationships_hf(
             # Update the processed item IDs set
             processed_item_ids = set(all_results.keys())
 
-            logger.info(
-                f"Saved results for item {item_id_str}. Total items in results file: {len(processed_item_ids)}/{total_items}"
-            )
+            # logger.info(
+            #     f"Saved results for item {item_id_str}. Total items in results file: {len(processed_item_ids)}/{total_items}"
+            # )
 
-            main_pbar.update(1)  # 更新主进度条
+            main_pbar.update(1)
 
             if idx < total_items - 1:  # If not the last item overall
-                logger.debug(
-                    f"Sleeping for {sleep_time} seconds before processing next item..."
-                )
+                # logger.debug(
+                #     f"Sleeping for {sleep_time} seconds before processing next item..."
+                # )
                 time.sleep(sleep_time)  # Sleep between items as well
 
     logger.info("ICA analysis with Hugging Face dataset finished.")
@@ -493,9 +502,7 @@ def main():
 
         # Initialize the global logger
         logger = setup_logger(f"{model_name_to_run}_ICA_run", log_file_path)
-        _logger_for_early_errors = (
-            logger  # Assign to the temp logger as well now that it's initialized
-        )
+        _logger_for_early_errors = logger
 
         logger.info(f"--- Starting ICA evaluation for model: {model_name_to_run} ---")
         logger.info(f"Using project root: {PROJECT_ROOT}")
@@ -507,6 +514,7 @@ def main():
         )
         hf_cache_dir_path.mkdir(parents=True, exist_ok=True)
         hf_config.HF_DATASETS_CACHE = str(hf_cache_dir_path)
+        os.environ["HF_DATASETS_CACHE"] = str(hf_cache_dir_path)
         logger.info(
             f"Hugging Face cache directory set to: {hf_config.HF_DATASETS_CACHE}"
         )
@@ -538,8 +546,8 @@ def main():
             results_file_path=results_file_path,
         )
 
-        logger.info(f"ICA evaluation finished for model: {model_name_to_run}.")
         logger.info(f"Final results saved to {results_file_path}")
+        logger.info(f"--- ICA evaluation finished for model: {model_name_to_run} ---")
 
     except FileNotFoundError as e:
         # Use a basic print if logger failed to initialize, otherwise use the logger

@@ -1,4 +1,6 @@
 # MM-OPERA/evaluation/RIA/RIA_run.py
+
+import os
 import time
 import requests
 import argparse
@@ -51,7 +53,7 @@ def analyze_image_relationships_hf(
         logger.error(f"Configuration for model '{model_name}' not found.")
         return {}
 
-    model_identifier = model_config.get("model_identifier") or model_name
+    model_identifier = model_config.get("model_identifier", model_name)
     provider_name = model_config.get("provider")
     provider_config = config["api_providers"].get(provider_name)
     if not provider_config:
@@ -79,13 +81,13 @@ def analyze_image_relationships_hf(
 
     ria_settings = config.get("evaluation_settings", {}).get("ria", {})
     prompt_template = ria_settings.get("prompt", "Default prompt if not found.")
-    max_tokens = model_config.get(
-        "default_max_tokens", ria_settings.get("default_max_tokens", 300)
-    )
+    max_tokens = ria_settings.get("default_max_tokens", 4096)
+
     num_images_to_process = ria_settings.get("num_images_to_process", 2)
-    sleep_time = ria_settings.get("sleep_time_after_judge_api") or config.get(
-        "general_settings", {}
-    ).get("sleep_time_between_requests", 1)
+    sleep_time = ria_settings.get(
+        "sleep_time_after_judge_api",
+        config.get("general_settings", {}).get("sleep_time_between_requests", 1),
+    )
 
     current_run_results_batch = {}  # Results for this specific run/batch
 
@@ -140,7 +142,7 @@ def analyze_image_relationships_hf(
                 )
 
             if item_id in processed_item_ids:
-                logger.info(f"Skipping already processed item: {item_id}")
+                # logger.info(f"Skipping already processed item: {item_id}")
                 main_pbar.update(1)  # Account for this item in the main progress
                 continue
 
@@ -390,6 +392,7 @@ def main():
 
         # Set the cache directory for Hugging Face datasets
         hf_config.HF_DATASETS_CACHE = str(hf_cache_dir)
+        os.environ["HF_DATASETS_CACHE"] = str(hf_cache_dir)
         hf_cache_dir.mkdir(parents=True, exist_ok=True)  # Ensure cache dir exists
         logger.info(
             f"Hugging Face cache directory set to: {hf_config.HF_DATASETS_CACHE}"
@@ -421,8 +424,9 @@ def main():
             results_file_path=results_file_path,
         )
 
-        logger.info(f"RIA evaluation finished for model: {model_name_to_run}.")
+
         logger.info(f"Final results saved to {results_file_path}")
+        logger.info(f"--- RIA evaluation finished for model: {model_name_to_run} ---")
 
     except FileNotFoundError as e:
         if logger:

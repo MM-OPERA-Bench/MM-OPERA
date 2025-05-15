@@ -202,8 +202,8 @@ def judge_model_results_main(
     judge_endpoint = judge_model_specific_config.get("endpoint", "/chat/completions")
     judge_api_url = f"{judge_base_url.rstrip('/')}/{judge_endpoint.lstrip('/')}"
 
-    judge_model_identifier = (
-        judge_model_specific_config.get("model_identifier") or judge_model_name
+    judge_model_identifier = judge_model_specific_config.get(
+        "model_identifier", judge_model_name
     )
     judge_api_key = get_api_key(judge_model_name)
     if not judge_api_key:
@@ -235,7 +235,7 @@ def judge_model_results_main(
     # Prepare batches of prompts for unjudged items
     all_prompts = []
     for item_id, mllm_result in mllm_results_data.items():
-        if item_id in judge_results and "score_4o" in judge_results[item_id]:
+        if item_id in judge_results and "score_judge" in judge_results[item_id]:
             # logger.info(f"Item {item_id} already judged. Skipping.")
             continue
 
@@ -354,7 +354,7 @@ def combine_results_and_judgements(mllm_results_data, final_judge_scores):
                 {
                     "MLLM_answer": mllm_response,
                     "judge_answer": {
-                        "score_4o": "N/A",
+                        "score_judge": "N/A",
                         "score_reason": "JUDGEMENT_DATA_MISSING",
                     },
                 }
@@ -390,11 +390,11 @@ def main():
         help="Name of the LLM to use as the judge (e.g., GPT-4o-judge). Must be defined in model_config.yaml.",
     )
     args = parser.parse_args()
-    test_model_to_judge = args.test_model_name
-
     temp_logger_for_config_errors = None
+
     try:
         config = get_config()
+        test_model_to_judge = args.test_model_name
         if not test_model_to_judge:
             test_model_to_judge = config["evaluation_settings"]["ria"][
                 "default_model_name"
@@ -442,9 +442,7 @@ def main():
         )
         hf_cache_dir_path.mkdir(parents=True, exist_ok=True)
         hf_config.HF_DATASETS_CACHE = str(hf_cache_dir_path)
-        os.environ["HF_DATASETS_CACHE"] = str(
-            hf_cache_dir_path
-        )  # Also set environment variable
+        os.environ["HF_DATASETS_CACHE"] = str(hf_cache_dir_path)
         logger.info(
             f"Hugging Face cache directory set to: {hf_config.HF_DATASETS_CACHE}"
         )

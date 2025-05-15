@@ -1,12 +1,12 @@
 # MM-OPERA/evaluation/ICA/ICA_reasoning_judge.py
 
+import os
 import argparse
 import time
 import requests
 import json
 from pathlib import Path
 from tqdm import tqdm
-
 
 # Relative imports
 from ..config_loader import get_config, get_api_key, PROJECT_ROOT
@@ -39,7 +39,7 @@ def get_image_descriptions_for_permutation(dataset_item, permutation_index: int)
         # This might happen if a dataset item doesn't have 4 descriptions.
         # The ICA dataset example provided has description1-4.
         logger.warning(
-            f"Dataset item {dataset_item.get('foldername')} missing one or more image descriptions (1-4)."
+            f"Dataset item {dataset_item.get('id')} missing one or more image descriptions (1-4)."
         )
         return None, None, None, None  # Indicate error or incomplete data
 
@@ -85,7 +85,7 @@ def format_judge_prompt_item(
         reasoning_list_str = dataset_item.get("reasoning")
         if not reasoning_list_str:
             logger.warning(
-                f"Missing 'reasoning' field in dataset item: {dataset_item.get('foldername')}"
+                f"Missing 'reasoning' field in dataset item: {dataset_item.get('id')}"
             )
             return None  # Cannot proceed without reference reasoning paths
 
@@ -94,7 +94,7 @@ def format_judge_prompt_item(
         reasoning_data = json.loads(reasoning_list_str)
         if not isinstance(reasoning_data, list) or len(reasoning_data) < 2:
             logger.error(
-                f"Invalid 'reasoning' format for {dataset_item.get('foldername')}. Expected list of 2 dicts. Got: {reasoning_data}"
+                f"Invalid 'reasoning' format for {dataset_item.get('id')}. Expected list of 2 dicts. Got: {reasoning_data}"
             )
             return None
 
@@ -135,7 +135,7 @@ def format_judge_prompt_item(
 
     except (json.JSONDecodeError, TypeError, IndexError) as e:
         logger.error(
-            f"Error parsing 'reasoning' field for {dataset_item.get('foldername')}: {e}. Content: {dataset_item.get('reasoning')}"
+            f"Error parsing 'reasoning' field for {dataset_item.get('id')}: {e}. Content: {dataset_item.get('reasoning')}"
         )
         return None
 
@@ -199,132 +199,130 @@ def perform_ica_reasoning_judgment(
     model_to_judge_name: str,
     judge_model_name: str,
     dataset_ica_split,  # This is dataset["ica"]
-    mllm_results: dict,  # {foldername: [output_perm0, output_perm1, ...]}
+    mllm_results: dict,  # {id: [output_perm0, output_perm1, ...]}
     config: dict,
     output_file_path: Path,
-    progress_file_path: Path,
 ):
     global logger
-    # ... (API setup for judge model, similar to RIA judge) ...
+    if logger is None:
+        print("Error: Logger not initialized.")
+        return
+
     judge_model_config = config["models"].get(judge_model_name)
+    if not judge_model_config:
+        logger.error(f"Configuration for judge model '{judge_model_name}' not found.")
+        return
+
     provider_name = judge_model_config["provider"]
     provider_config = config["api_providers"].get(provider_name)
-    judge_api_key = get_api_key(judge_model_name)
-    if not all([judge_model_config, provider_config, judge_api_key]):
-        logger.error(f"Missing config/API key for judge model '{judge_model_name}'.")
+    if not provider_config:
+        logger.error(
+            f"Configuration for provider '{provider_name}' (for judge model) not found."
+        )
         return
-    judge_api_url = provider_config["base_url"] + judge_model_config["endpoint"]
+
+    judge_api_key = get_api_key(judge_model_name)
+    if not judge_api_key:
+        logger.error(
+            f"API key for judge model '{judge_model_name}' not found. Skipping."
+        )
+        return
+
+    judge_base_url = provider_config["base_url"]
+    judge_endpoint = judge_model_config.get("endpoint", "/chat/completions")
+    judge_api_url = f"{judge_base_url.rstrip('/')}/{judge_endpoint.lstrip('/')}"
+
     headers = {
         "Authorization": f"Bearer {judge_api_key}",
         "Content-Type": "application/json",
     }
 
+    judge_model_identifier = (
+        judge_model_config.get("model_identifier") or judge_model_name
+    )
+
+    general_config = config["general_settings"]
     ica_judge_settings = config["evaluation_settings"]["ica"]["reasoning_judge"]
     system_prompt = ica_judge_settings["prompt"]
     group_size = ica_judge_settings["judge_group_size"]
     judge_max_tokens = (
         ica_judge_settings["judge_max_tokens_per_batch_multiplier"] * group_size
     )
-    sleep_time = ica_judge_settings["sleep_time_after_judge_api"]
+    sleep_time = ica_judge_settings.get(
+        "sleep_time_after_judge_api",
+        general_config.get("sleep_time_between_judge_requests", 7),
+    )
     expect_rotated = ica_judge_settings.get("expect_rotated_test_results", True)
     num_permutations_to_judge = 4 if expect_rotated else 1
 
-    existing_judgements = (
-        load_json(output_file_path) or {}
-    )  # {foldername: [judgement_perm0, judgement_perm1, ...]}
-    # Progress will track (foldername, permutation_index) pairs
-    processed_item_perm_tuples = set(
-        tuple(item) for item in (load_json(progress_file_path) or [])
-    )
+    existing_judgements = load_json(output_file_path) or {}
 
     logger.info(
         f"Loaded {sum(len(v) for v in existing_judgements.values() if isinstance(v, list))} existing judgement entries."
     )
-    logger.info(
-        f"Loaded {len(processed_item_perm_tuples)} processed (item, permutation_index) tuples for progress."
-    )
 
     items_for_judge_api = (
         []
-    )  # List of dicts: {foldername, perm_idx, dataset_item_ref, mllm_output_text}
+    )  # List of dicts: {id, perm_idx, dataset_item_ref, mllm_output_text}
 
-    # Iterate safely, skipping items with image loading issues
-    # safe_iterator = safe_dataset_iterator_with_error_info(dataset_ica_split, logger, desc="Preparing ICA items")
-    # for original_idx, hf_item in safe_iterator: # Use original_idx if needed for anything
-
-    for (
-        hf_item
-    ) in (
-        dataset_ica_split
-    ):  # Assuming direct iteration for now, add safe_iterator if needed
-        foldername = hf_item.get("foldername")
-        item_id = hf_item.get(
-            "id"
-        )  # Using 'id' as unique identifier for dataset item if 'foldername' isn't granular enough
-        if not foldername:  # or not item_id
-            logger.warning(
-                f"Skipping dataset item due to missing 'foldername' or 'id': {hf_item}"
-            )
+    for hf_item in dataset_ica_split:
+        item_id = hf_item.get("id")
+        if not item_id:
+            logger.warning(f"Skipping dataset item due to missing 'id': {hf_item}")
             continue
 
-        mllm_outputs_for_folder = mllm_results.get(foldername)
-        if not mllm_outputs_for_folder or not isinstance(mllm_outputs_for_folder, list):
-            logger.warning(f"No MLLM result list found for '{foldername}'. Skipping.")
-            for perm_idx in range(
-                num_permutations_to_judge
-            ):  # Mark all perms as processed (with error)
-                processed_item_perm_tuples.add((foldername, perm_idx))
+        mllm_outputs_for_item = mllm_results.get(item_id)
+        if not mllm_outputs_for_item or not isinstance(mllm_outputs_for_item, list):
+            # logger.warning(f"No MLLM result list found for id '{item_id}'. Skipping.")
             continue
 
-        if len(mllm_outputs_for_folder) < num_permutations_to_judge:
+        if len(mllm_outputs_for_item) < num_permutations_to_judge:
             logger.warning(
-                f"MLLM results for '{foldername}' has {len(mllm_outputs_for_folder)} items, expected {num_permutations_to_judge}. Some permutations might be skipped or marked as error."
+                f"MLLM results for id '{item_id}' has {len(mllm_outputs_for_item)} items, expected {num_permutations_to_judge}. Some permutations might be skipped or marked as error."
             )
 
-        if foldername not in existing_judgements:
-            existing_judgements[foldername] = [None] * num_permutations_to_judge
-        elif (
-            len(existing_judgements[foldername]) < num_permutations_to_judge
-        ):  # if loaded data is shorter
-            existing_judgements[foldername].extend(
-                [None]
-                * (num_permutations_to_judge - len(existing_judgements[foldername]))
+        if item_id not in existing_judgements:
+            existing_judgements[item_id] = [None] * num_permutations_to_judge
+        elif len(existing_judgements[item_id]) < num_permutations_to_judge:
+            existing_judgements[item_id].extend(
+                [None] * (num_permutations_to_judge - len(existing_judgements[item_id]))
             )
 
         for perm_idx in range(num_permutations_to_judge):
-            if (foldername, perm_idx) in processed_item_perm_tuples:
-                # Optional: could re-validate existing_judgements[foldername][perm_idx] here
-                continue  # Already processed
-
-            if perm_idx >= len(mllm_outputs_for_folder):
-                logger.warning(
-                    f"Missing MLLM output for '{foldername}', permutation {perm_idx}. Marking as error."
-                )
-                existing_judgements[foldername][perm_idx] = {
-                    "error": f"Missing MLLM output for permutation {perm_idx}."
-                }
-                processed_item_perm_tuples.add((foldername, perm_idx))
+            # 修改这里：检查是否为None或包含error字段
+            if existing_judgements[item_id][perm_idx] is not None and not (
+                isinstance(existing_judgements[item_id][perm_idx], dict)
+                and "error" in existing_judgements[item_id][perm_idx]
+            ):
                 continue
 
-            mllm_output_text = mllm_outputs_for_folder[perm_idx]
+            if perm_idx >= len(mllm_outputs_for_item):
+                logger.warning(
+                    f"Missing MLLM output for id '{item_id}', permutation {perm_idx}. Marking as error."
+                )
+                existing_judgements[item_id][perm_idx] = {
+                    "error": f"Missing MLLM output for permutation {perm_idx}."
+                }
+                continue
+
+            mllm_output_text = mllm_outputs_for_item[perm_idx]
             if (
                 not isinstance(mllm_output_text, str)
                 or "Error:" in mllm_output_text
                 or not mllm_output_text.strip()
             ):
                 logger.warning(
-                    f"Invalid/error MLLM output for '{foldername}', perm {perm_idx}. Output: {str(mllm_output_text)[:100]}"
+                    f"Invalid/error MLLM output for id '{item_id}', perm {perm_idx}. Output: {str(mllm_output_text)[:100]}"
                 )
-                existing_judgements[foldername][perm_idx] = {
+                existing_judgements[item_id][perm_idx] = {
                     "error": "Invalid or error MLLM output for this permutation.",
                     "mllm_output_preview": str(mllm_output_text)[:100],
                 }
-                processed_item_perm_tuples.add((foldername, perm_idx))
                 continue
 
             items_for_judge_api.append(
                 {
-                    "foldername": foldername,
+                    "id": item_id,
                     "perm_idx": perm_idx,
                     "dataset_item_ref": hf_item,  # Keep a reference to the full HF dataset item
                     "mllm_output_text": mllm_output_text,
@@ -333,9 +331,6 @@ def perform_ica_reasoning_judgment(
 
     if not items_for_judge_api:
         logger.info("No new items or permutations to judge for ICA.")
-        save_json(
-            list(sorted(list(processed_item_perm_tuples))), progress_file_path
-        )  # Save progress
         save_json(existing_judgements, output_file_path)
         return
 
@@ -351,7 +346,7 @@ def perform_ica_reasoning_judgment(
             batch_items_data = items_for_judge_api[i : i + group_size]
 
             user_prompts_for_batch_api = []
-            current_batch_identifiers = []  # List of (foldername, perm_idx)
+            current_batch_identifiers = []  # List of (id, perm_idx)
 
             for idx_in_batch, item_data in enumerate(batch_items_data):
                 formatted_prompt_str = format_judge_prompt_item(
@@ -361,35 +356,28 @@ def perform_ica_reasoning_judgment(
                 )
                 if formatted_prompt_str is None:
                     logger.error(
-                        f"Failed to format prompt for {item_data['foldername']}, perm {item_data['perm_idx']}. Skipping this item in batch."
+                        f"Failed to format prompt for id {item_data['id']}, perm {item_data['perm_idx']}. Skipping this item in batch."
                     )
-                    # Mark as processed with error
-                    existing_judgements[item_data["foldername"]][
-                        item_data["perm_idx"]
-                    ] = {"error": "Failed to format judge prompt."}
-                    processed_item_perm_tuples.add(
-                        (item_data["foldername"], item_data["perm_idx"])
-                    )
+                    existing_judgements[item_data["id"]][item_data["perm_idx"]] = {
+                        "error": "Failed to format judge prompt."
+                    }
                     continue
 
                 user_prompts_for_batch_api.append(
                     f"{idx_in_batch + 1}.\n{formatted_prompt_str}"
                 )
                 current_batch_identifiers.append(
-                    (item_data["foldername"], item_data["perm_idx"])
+                    (item_data["id"], item_data["perm_idx"])
                 )
 
-            if not user_prompts_for_batch_api:  # All items in batch failed formatting
+            if not user_prompts_for_batch_api:
                 pbar.update(len(batch_items_data))
-                save_json(existing_judgements, output_file_path)  # Save errors
-                save_json(
-                    list(sorted(list(processed_item_perm_tuples))), progress_file_path
-                )
+                save_json(existing_judgements, output_file_path)
                 continue
 
             full_user_prompt = "\n\n".join(user_prompts_for_batch_api)
             payload = {
-                "model": judge_model_name,
+                "model": judge_model_identifier,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": full_user_prompt},
@@ -403,7 +391,7 @@ def perform_ica_reasoning_judgment(
                 )
                 api_response = requests.post(
                     judge_api_url, headers=headers, json=payload, timeout=240
-                )  # Longer timeout for ICA
+                )
                 api_response.raise_for_status()
                 response_json = api_response.json()
                 judge_response_content = (
@@ -412,7 +400,7 @@ def perform_ica_reasoning_judgment(
                     .get("content")
                 )
 
-                if not judge_response_content:  # Handle empty content
+                if not judge_response_content:
                     raise ValueError("Judge model returned no content.")
 
                 if judge_response_content.startswith("```json"):
@@ -421,37 +409,34 @@ def perform_ica_reasoning_judgment(
                     judge_response_content = judge_response_content[:-3]
                 parsed_judgements_batch = json.loads(judge_response_content.strip())
 
-                for idx_in_api_batch, (foldername, perm_idx) in enumerate(
+                for idx_in_api_batch, (item_id, perm_idx) in enumerate(
                     current_batch_identifiers
                 ):
                     judgement_key = str(idx_in_api_batch + 1)
                     if judgement_key in parsed_judgements_batch:
                         single_judgement = parsed_judgements_batch[judgement_key]
                         if validate_ica_judgement(single_judgement):
-                            existing_judgements[foldername][perm_idx] = single_judgement
-                            logger.info(
-                                f"Successfully judged: {foldername}, perm_idx {perm_idx}"
-                            )
+                            existing_judgements[item_id][perm_idx] = single_judgement
+                            # logger.info(
+                            #     f"Successfully judged: id {item_id}, perm_idx {perm_idx}"
+                            # )
                         else:
                             logger.error(
-                                f"Invalid judgement structure for {foldername}, perm {perm_idx}: {single_judgement}"
+                                f"Invalid judgement structure for id {item_id}, perm {perm_idx}: {single_judgement}"
                             )
-                            existing_judgements[foldername][perm_idx] = {
+                            existing_judgements[item_id][perm_idx] = {
                                 "error": "Invalid judgement structure from judge.",
                                 "raw_judgement": single_judgement,
                             }
                     else:
                         logger.error(
-                            f"Judge response missing key '{judgement_key}' for {foldername}, perm {perm_idx}."
+                            f"Judge response missing key '{judgement_key}' for id {item_id}, perm {perm_idx}."
                         )
-                        existing_judgements[foldername][perm_idx] = {
+                        existing_judgements[item_id][perm_idx] = {
                             "error": f"Judge response missing key '{judgement_key}'."
                         }
-                    processed_item_perm_tuples.add((foldername, perm_idx))
 
-            except (
-                Exception
-            ) as e:  # Catch requests errors, JSON errors, ValueErrors etc.
+            except Exception as e:
                 logger.error(
                     f"Error processing API batch (first item: {current_batch_identifiers[0] if current_batch_identifiers else 'N/A'}): {e}",
                     exc_info=True,
@@ -462,78 +447,80 @@ def perform_ica_reasoning_judgment(
                     else "No response text available"
                 )
                 for (
-                    foldername,
+                    item_id,
                     perm_idx,
-                ) in current_batch_identifiers:  # Mark all items in failed batch
-                    if (
-                        foldername,
-                        perm_idx,
-                    ) not in processed_item_perm_tuples:  # Avoid overwriting specific formatting error
-                        existing_judgements[foldername][perm_idx] = {
+                ) in current_batch_identifiers:
+                    if existing_judgements[item_id][perm_idx] is None:
+                        existing_judgements[item_id][perm_idx] = {
                             "error": f"API/Processing error in batch: {str(e)[:100]}",
                             "raw_response_preview": raw_resp_text[:200],
                         }
-                    processed_item_perm_tuples.add((foldername, perm_idx))
             finally:
                 save_json(existing_judgements, output_file_path)
-                save_json(
-                    list(sorted(list(processed_item_perm_tuples))), progress_file_path
-                )
-                pbar.update(
-                    len(batch_items_data)
-                )  # Update for all items attempted in batch
+                pbar.update(len(batch_items_data))
                 if i + group_size < len(items_for_judge_api):
                     time.sleep(sleep_time)
 
-    logger.info(f"ICA Reasoning judgement finished for model: {model_to_judge_name}.")
+    logger.info(
+        f"--- ICA Reasoning judgement finished for model: {model_to_judge_name} ---"
+    )
 
 
 def main():
     global logger
     parser = argparse.ArgumentParser(description="Perform ICA reasoning judgement.")
     parser.add_argument(
-        "--model_name", type=str, required=True, help="MLLM results to judge."
+        "--test_model_name",
+        type=str,
+        # required=True,
+        help="Name of the MLLM whose results are being judged (e.g., Gemini-2.0-Flash-Thinking-Exp). Must match a model defined in model_config.yaml.",
     )
     parser.add_argument(
-        "--judge_model_name", type=str, default=None, help="LLM judge model."
+        "--judge_model_name",
+        type=str,
+        default=None,
+        help="Name of the LLM to use as the judge (e.g., GPT-4o-judge). Must be defined in model_config.yaml.",
     )
     args = parser.parse_args()
 
-    model_to_judge_name = args.model_name
-
     try:
         config = get_config()
-        judge_model_name_arg = (
-            args.judge_model_name
-            or config["evaluation_settings"]["ica"]["reasoning_judge"][
-                "default_judge_model_name"
+        model_to_judge_name = args.test_model_name
+        if not model_to_judge_name:
+            model_to_judge_name = config["evaluation_settings"]["ica"][
+                "default_model_name"
             ]
-        )
+        judge_model_name_arg = args.judge_model_name
+        if not judge_model_name_arg:
+            judge_model_name_arg = config["evaluation_settings"]["ica"][
+                "reasoning_judge"
+            ].get("default_judge_model_name")
+            if not judge_model_name_arg:
+                raise ValueError(
+                    "Judge model name not provided via argument and not found in config's default_judge_model_name."
+                )
 
         # Paths
         results_dir = PROJECT_ROOT / config["general_settings"]["results_base_dir"]
         logs_dir = PROJECT_ROOT / config["general_settings"]["logs_base_dir"]
-        progress_dir = PROJECT_ROOT / config["general_settings"]["progress_base_dir"]
         results_dir.mkdir(parents=True, exist_ok=True)
         logs_dir.mkdir(parents=True, exist_ok=True)
-        progress_dir.mkdir(parents=True, exist_ok=True)
 
-        log_file = logs_dir / f"ICA_{model_to_judge_name}_reasoning_judge.log"
+        log_file = logs_dir / f"{model_to_judge_name}_ICA_reasoning_judge.log"
         mllm_results_file = (
-            results_dir / f"ICA_{model_to_judge_name}_results.json"
+            results_dir / f"{model_to_judge_name}_ICA_results.json"
         )  # Input MLLM answers
         output_scoring_file = (
-            results_dir / f"ICA_{model_to_judge_name}_reasoning_scoring.json"
+            results_dir / f"{model_to_judge_name}_ICA_reasoning_scoring.json"
         )  # Output scores
-        progress_file = (
-            progress_dir / f"ICA_{model_to_judge_name}_reasoning_judge_progress.json"
-        )
 
-        logger = setup_logger(f"ICA_ReasoningJudge_{model_to_judge_name}", log_file)
+        logger = setup_logger(f"{model_to_judge_name}_ICA_ReasoningJudge", log_file)
         logger.info(
             f"--- Starting ICA reasoning judgement for MLLM: {model_to_judge_name} using Judge: {judge_model_name_arg} ---"
         )
-        # ... (log other paths)
+        logger.info(f"Project root: {PROJECT_ROOT}")
+        logger.info(f"MLLM results (input): {mllm_results_file}")
+        logger.info(f"Reasoning scores (output): {output_scoring_file}")
 
         if not mllm_results_file.exists():
             logger.error(
@@ -551,10 +538,12 @@ def main():
         )
         hf_ds_name = config["general_settings"]["huggingface_dataset_name"]
         hf_config.HF_DATASETS_CACHE = hf_cache
+        os.environ["HF_DATASETS_CACHE"] = hf_cache
         Path(hf_cache).mkdir(parents=True, exist_ok=True)
+        logger.info(
+            f"Hugging Face cache directory set to: {hf_config.HF_DATASETS_CACHE}"
+        )
 
-        # Specify columns to load to avoid image decoding issues, if possible
-        # For ICA, we need 'foldername', 'id', 'description1'-'description4', 'relation', 'reasoning'
         ica_columns_needed = [
             "id",
             "foldername",
@@ -581,8 +570,7 @@ def main():
                 logger.error(
                     f"Required columns missing from ICA dataset: {missing}. Cannot proceed with selective column loading for judge."
                 )
-                # Decide if you want to proceed with all columns or exit
-                # For now, let's try to proceed with all, but it might hit image errors
+
                 dataset_ica_split_formatted = dataset["ica"]
                 logger.warning(
                     "Proceeding with all columns for ICA dataset. Image decoding errors may occur."
@@ -607,7 +595,6 @@ def main():
             mllm_results,
             config,
             output_scoring_file,
-            progress_file,
         )
 
     except Exception as e:
@@ -620,6 +607,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # Run from MM-OPERA root:
-    # python -m evaluation.ICA.ICA_reasoning_judge --model_name gpt-4o
     main()

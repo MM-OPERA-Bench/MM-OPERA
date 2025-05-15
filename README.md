@@ -20,8 +20,35 @@ python -m evaluation.RIA.RIA_run --model_name Gemini-2.0-Flash-Thinking-Exp
 
 ```bash
 python -m evaluation.RIA.RIA_regular_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name GPT-4o-judge
+python -m evaluation.RIA.RIA_regular_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name Gemini-2.0-Flash-Thinking-Exp
+
 ```
 
 ```bash
 python -m evaluation.RIA.RIA_reasoning_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name GPT-4o-judge
+python -m evaluation.RIA.RIA_reasoning_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name Gemini-2.0-Flash-Thinking-Exp
 ```
+
+```bash
+python -m evaluation.ICA.ICA_run --model_name Gemini-2.0-Flash-Thinking-Exp
+```
+
+```bash
+python -m evaluation.ICA.ICA_regular_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name GPT-4o-judge
+python -m evaluation.ICA.ICA_regular_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name Gemini-2.0-Flash-Thinking-Exp
+```
+
+```bash
+python -m evaluation.ICA.ICA_reasoning_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name GPT-4o-judge
+python -m evaluation.ICA.ICA_reasoning_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name GPT-4-Omni
+python -m evaluation.ICA.ICA_reasoning_judge --test_model_name Gemini-2.0-Flash-Thinking-Exp --judge_model_name Gemini-2.0-Flash-Thinking-Exp
+```
+
+```bash
+python -m evaluation.RIA.RIA_stat --model_name Gemini-2.0-Flash-Thinking-Exp
+```
+
+```bash
+python -m evaluation.ICA.ICA_stat --model_name Gemini-2.0-Flash-Thinking-Exp
+```
+
