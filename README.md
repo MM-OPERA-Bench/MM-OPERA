@@ -15,7 +15,7 @@ MM-OPERA (Multi-Modal Open-Ended Reasoning-guided Association) is a benchmark de
 
   * **Levels**: From sensory perception (L‑1) to abstract reasoning (L‑3) across 13 fine-grained dimensions.
   * **Relationships**: Captures literal and symbolic links via Relation, Mutual Element, and Metaphor categories.
-* **Structured Reasoning Paths**: Represents each multi-hop solution as a directed path; hop count reflects complexity.
+* **Structured Association Reasoning Paths**: Represents each multi-hop solution as a directed path; hop count reflects complexity.
 
 ![overview](fig/task.png)
 
