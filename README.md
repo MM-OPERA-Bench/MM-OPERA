@@ -36,6 +36,23 @@ Dataset available on [HuggingFace](https://huggingface.co/datasets/titic/MM-OPER
 
 ![dataset](fig/statistic.png)
 
+## 🔍 Evaluation
+
+To assess open-ended responses, MM-OPERA uses two LLM-as-a-Judge strategies:
+
+1. **Regular Scoring** (Holistic Score):
+
+   * **0–4 points** based on accuracy, coherence, and insight against reference chains.
+   * Metrics: **Score Rate (SR)**, **High Score Rate (HR‑3/HR‑4)**, and ΔHR (divergent thinking measure).
+
+2. **Process-Reward Scoring** (Reasoning Score):
+
+   * Converts responses into multi-hop paths and scores each step by:
+     * **Reasonableness ($R_t$)**, **Distinctiveness ($D_t$)**, **Knowledgeability ($K_t$)**.
+   * Step score: \$s_t = \alpha R_tD_t + (1-\alpha) K_t\$; Path score: \$S_r = \sum_t s_t \delta^t\$.
+   * Captures the quality and efficiency of the chain of thought.
+
+
 ## 💾 Installation
 Clone this repository and set up the environment:
 
@@ -119,22 +136,6 @@ python -m evaluation.ICA.ICA_stat --model_name YourModel
 ```
 
 Logs are saved to `logs/` and results to `results/` as JSON files.
-
-## 🔍 Evaluation
-
-To assess open-ended responses, MM-OPERA uses two LLM-as-a-Judge strategies:
-
-1. **Regular Scoring** (Holistic Score):
-
-   * **0–4 points** based on accuracy, coherence, and insight against reference chains.
-   * Metrics: **Score Rate (SR)**, **High Score Rate (HR‑3/HR‑4)**, and ΔHR (divergent thinking measure).
-
-2. **Process-Reward Scoring** (Reasoning Score):
-
-   * Converts responses into multi-hop paths and scores each step by:
-     * **Reasonableness ($R_t$)**, **Distinctiveness ($D_t$)**, **Knowledgeability ($K_t$)**.
-   * Step score: \$s_t = \alpha R_tD_t + (1-\alpha) K_t\$; Path score: \$S_r = \sum_t s_t \delta^t\$.
-   * Captures the quality and efficiency of the chain of thought.
 
 ## 📝 Contributing
 
