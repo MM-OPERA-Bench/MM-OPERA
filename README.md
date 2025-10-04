@@ -1,6 +1,9 @@
 # MM-OPERA
 
-[![Dataset on Hugging Face](https://img.shields.io/badge/Dataset-Hugging%20Face-blue)](https://huggingface.co/datasets/titic/MM-OPERA)
+[![NeurIPS 2025](https://img.shields.io/badge/NeurIPS-2025-brightgreen)](https://openreview.net/forum?id=6BpKATZQd8#discussion)
+[![Dataset on Hugging Face](https://img.shields.io/badge/Dataset-Hugging%20Face-orange)](https://huggingface.co/datasets/titic/MM-OPERA)
+
+> 🎉 **Congratulations** — our paper _“MM-OPERA: Benchmarking Open-ended Association Reasoning for Large Vision-Language Models”_ has been accepted to **NeurIPS 2025 DB Track**!  
 
 MM-OPERA (Multi-Modal Open-Ended Reasoning-guided Association) is a benchmark designed to evaluate **association** reasoning in large vision-language models (LVLMs). It emphasizes **open-ended, multi-step reasoning** across diverse modalities and concepts, moving beyond fixed-choice tasks to probe both convergent and divergent thinking.
 
@@ -144,3 +147,7 @@ Contributions to MM-OPERA are welcome! Please submit issues or pull requests on 
 ## 📜 License
 
 MIT License. See [LICENSE](LICENSE) for details.
+
+
+
+
