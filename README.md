@@ -149,6 +149,20 @@ Contributions to MM-OPERA are welcome! Please submit issues or pull requests on 
 
 MIT License. See [LICENSE](LICENSE) for details.
 
+## ✏️ Citation
+
+To cite, please use:
+
+```text
+@inproceedings{huang2025mmopera,
+  title={{MM-OPERA: Benchmarking Open-ended Association Reasoning for Large Vision-Language Models}},
+  author={Zimeng Huang and Jinxin Ke and Xiaoxuan Fan and Yufeng Yang and Yang Liu and Liu Zhonghan and Zedi Wang and Junteng Dai and Haoyi Jiang and Yuyu Zhou and Keze Wang and Ziliang Chen},
+  booktitle={Advances in Neural Information Processing Systems 39},
+  year={2025}
+}
+```
+
+
 
 
 
