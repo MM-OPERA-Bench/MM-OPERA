@@ -153,7 +153,7 @@ MIT License. See [LICENSE](LICENSE) for details.
 
 To cite, please use:
 
-```text
+```bibtex
 @inproceedings{huang2025mmopera,
   title={{MM-OPERA: Benchmarking Open-ended Association Reasoning for Large Vision-Language Models}},
   author={Zimeng Huang and Jinxin Ke and Xiaoxuan Fan and Yufeng Yang and Yang Liu and Liu Zhonghan and Zedi Wang and Junteng Dai and Haoyi Jiang and Yuyu Zhou and Keze Wang and Ziliang Chen},
@@ -161,6 +161,7 @@ To cite, please use:
   year={2025}
 }
 ```
+
 
 
 
